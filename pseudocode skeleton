@@ -177,4 +177,72 @@ stamp_element(e, G, C, b, node_index, branch_index,
     #     compute linearized equivalent and stamp it (not shown here)
 
 
+[Core linear stamps (time‑continuous form)]
+
+stamp_R(e, G, node_index):
+    n1 = node_index[e.nodes[0]]
+    n2 = node_index[e.nodes[1]]
+    R  = e.params["value"]
+    g  = 1 / R
+
+    if n1 != 0:
+        G[n1,n1] += g
+    if n2 != 0:
+        G[n2,n2] += g
+    if n1 != 0 and n2 != 0:
+        G[n1,n2] -= g
+        G[n2,n1] -= g
+
+[Resistor R between n1, n2]
+
+stamp_R(e, G, node_index):
+    n1 = node_index[e.nodes[0]]
+    n2 = node_index[e.nodes[1]]
+    R  = e.params["value"]
+    g  = 1 / R
+
+    if n1 != 0:
+        G[n1,n1] += g
+    if n2 != 0:
+        G[n2,n2] += g
+    if n1 != 0 and n2 != 0:
+        G[n1,n2] -= g
+        G[n2,n1] -= g
+
+[Capacitor C between n1, n2 (pure MNA form)]
+
+stamp_C(e, Cmat, node_index):
+    n1 = node_index[e.nodes[0]]
+    n2 = node_index[e.nodes[1]]
+    Cval = e.params["value"]
+
+    if n1 != 0:
+        Cmat[n1,n1] += Cval
+    if n2 != 0:
+        Cmat[n2,n2] += Cval
+    if n1 != 0 and n2 != 0:
+        Cmat[n1,n2] -= Cval
+        Cmat[n2,n1] -= Cval
+
+[Inductor L between n1, n2 (with current variable k)]
+
+stamp_L(e, G, Cmat, node_index, branch_index):
+    n1 = node_index[e.nodes[0]]
+    n2 = node_index[e.nodes[1]]
+    k  = branch_index[e.name]
+    L  = e.params["value"]
+
+    # KCL at nodes: current through inductor enters/leaves nodes
+    if n1 != 0:
+        G[n1,k] += 1
+    if n2 != 0:
+        G[n2,k] -= 1
+
+    # KVL for inductor branch: v_L = v(n1) - v(n2) = L * dI/dt
+    if n1 != 0:
+        G[k,n1] += 1
+    if n2 != 0:
+        G[k,n2] -= 1
+
+    Cmat[k,k] -= L
 
