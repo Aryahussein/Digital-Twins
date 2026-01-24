@@ -246,3 +246,115 @@ stamp_L(e, G, Cmat, node_index, branch_index):
 
     Cmat[k,k] -= L
 
+[Independent current source I from n+ to n−]
+
+stamp_I(e, b, node_index, t):
+    nplus  = node_index[e.nodes[0]]
+    nminus = node_index[e.nodes[1]]
+    Ival   = evaluate_source(e, t)    # can be constant or time function
+
+    if nplus != 0:
+        b[nplus] -= Ival      # current leaving nplus
+    if nminus != 0:
+        b[nminus] += Ival
+
+[Independent voltage source V from n+ to n− (with current variable k)]
+
+stamp_V(e, G, b, node_index, branch_index, t):
+    nplus  = node_index[e.nodes[0]]
+    nminus = node_index[e.nodes[1]]
+    k      = branch_index[e.name]
+    Vval   = evaluate_source(e, t)
+
+    # KCL at nodes: current through voltage source
+    if nplus != 0:
+        G[nplus,k] += 1
+    if nminus != 0:
+        G[nminus,k] -= 1
+
+    # KVL for source branch: v(nplus) - v(nminus) = V
+    if nplus != 0:
+        G[k,nplus] += 1
+    if nminus != 0:
+        G[k,nminus] -= 1
+
+    b[k] += Vval
+
+[DC analysis]
+
+solve_dc(circuit):
+    # assemble at t = 0, no history
+    G, C, b = assemble_linear_system(circuit,
+                                     t = 0,
+                                     x_prev = NULL,
+                                     xdot_prev = NULL,
+                                     options = NULL)
+
+    # for DC, ignore C and solve G x = b
+    x = solve_linear_system(G, b)
+    return x
+
+[Transient analysis (backward Euler example)]
+
+solve_transient(circuit, options):
+    t0   = options.t_start
+    t1   = options.t_stop
+    dt   = options.dt
+    N    = circuit.Nvars
+
+    # initial condition from DC (or zeros)
+    x0 = solve_dc(circuit)
+
+    num_steps = floor((t1 - t0) / dt)
+    times = array_of_length(num_steps + 1)
+    X     = matrix(num_steps + 1, N)
+
+    t = t0
+    x_prev = x0
+
+    times[0] = t
+    X[0,:]   = x_prev
+
+    for step from 1 to num_steps:
+        t = t0 + step * dt
+
+        # build G, C, b for this netlist (time-dependent sources)
+        G, C, b = assemble_linear_system(circuit,
+                                         t,
+                                         x_prev,
+                                         NULL,      # xdot_prev not needed for BE
+                                         options)
+
+        # form effective matrix and RHS: (C/dt + G) * x = b + (C/dt) * x_prev
+        A = copy_matrix(G)
+        for i in 1..N:
+            for j in 1..N:
+                A[i,j] += C[i,j] / dt
+
+        rhs = copy_vector(b)
+        tmp = (C / dt) * x_prev      # matrix-vector multiply
+        rhs = rhs + tmp
+
+        x = solve_linear_system(A, rhs)
+
+        times[step] = t
+        X[step,:]   = x
+        x_prev      = x
+
+    return times, X
+
+[Helper: source evaluation]
+
+evaluate_source(e, t):
+    # simplest: constant sources
+    if "waveform" not in e.params:
+        return e.params["value"]
+
+    # else: support PULSE, SIN, etc. by checking e.params["waveform"]
+    # and computing its value at time t
+    if e.params["waveform"] == "SIN":
+        # example: value = offset + amplitude * sin(2*pi*f*t + phi)
+        ...
+    elif e.params["waveform"] == "PULSE":
+        ...
+    ...
