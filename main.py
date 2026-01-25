@@ -30,5 +30,6 @@ def dc_nodal_analysis(netlist):
 
 
 if __name__ == "__main__":
-    netlist = "testFiles/example_lecture.txt"
+    netlist = "testfiles/example_lecture.txt"
     dc_nodal_analysis(netlist)
+
