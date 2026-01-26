@@ -1,0 +1,8 @@
+* Example circuit from lecture slides
+
+I1 0 1 30m
+R1 1 2 100
+R2 2 0 2.2k
+R3 2 3 470
+R4 3 0 1.5k
+R5 1 3 3.3k
