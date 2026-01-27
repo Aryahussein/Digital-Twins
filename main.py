@@ -2,7 +2,7 @@ from txt2dictionary import parse_netlist
 from node_index import build_node_index
 from solver import solve_sparse
 from postprocessing import map_voltages
-from netlist2Ymatrix import generate_stamps
+from assembleYmatrix import generate_stamps
 import matplotlib.pyplot as plt
 
 def dc_nodal_analysis(netlist):
@@ -32,4 +32,5 @@ def dc_nodal_analysis(netlist):
 if __name__ == "__main__":
     netlist = "testfiles/example_lecture.txt"
     dc_nodal_analysis(netlist)
+
 
