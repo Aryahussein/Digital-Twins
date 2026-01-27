@@ -3,6 +3,10 @@ from scipy.sparse.linalg import splu
 
 
 def solve_sparse(G, I):
+    """
+    G: nxn matrix
+    I: nx1 vector
+    """
     return spsolve(G, I)
 
 def lu_factorize(Y):
@@ -12,7 +16,8 @@ def lu_factorize(Y):
     To use the transpose of the super-LU object,
     v = lu.solve(I, trans='T').
     :param Y:
-    :return:
+    :return: lu
     """
     lu = splu(Y)
     return lu
+
