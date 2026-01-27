@@ -179,3 +179,35 @@ print("\n=========== NODAL EQUATIONS Y·V = I ===============")
 for i in range(N):
     expr = sum(Y[i, j] * Vn[j] for j in range(N))
     sp.pprint(sp.Eq(expr, I[i]))
+
+# ==========================================================
+# Solve Y·V = I using LU (only valid if no voltage sources)
+# ==========================================================
+if M == 0:
+    print("\n=========== SOLVING Y·V = I USING LU ===========")
+
+    try:
+        # LU decomposition
+        L, U, perm = Y.LUdecomposition()
+
+        print("\nL matrix:")
+        sp.pprint(L)
+
+        print("\nU matrix:")
+        sp.pprint(U)
+
+        # Solve using LU
+        V_sol = Y.LUsolve(I)
+
+        print("\n=========== NODE VOLTAGE SOLUTION ===========")
+        for n, v in zip(nodes, V_sol):
+            sp.pprint(sp.Eq(sp.symbols(f"V{n}"), v))
+
+    except Exception as e:
+        print("\nLU solve failed:")
+        print(e)
+
+else:
+    print("\n=========== LU SOLVE SKIPPED ===========")
+    print("Reason: Ideal voltage source present.")
+    print("Use full MNA system (A·X = Z) instead.")
