@@ -5,3 +5,6 @@
 - Adjust indexing scheme to minimize off-diagonal elements: nodes that touch each other should be indexed with sequential node numbers
 -> depth first search to determine ideal node indices?
 - sensitivity analysis
+- AC nodal analysis
+- transient analysis
+
