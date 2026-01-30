@@ -11,6 +11,10 @@ def build_node_index(components):
             nodes.add(comp["n1"])
         if comp["n2"] != 0:
             nodes.add(comp["n2"])
+        if comp["n3"] != 0:
+            nodes.add(comp["n3"])
+        if comp["n4"] != 0:
+            nodes.add(comp["n4"])
 
     node_list = sorted(nodes)
     node_index = {node: idx for idx, node in enumerate(node_list)}
