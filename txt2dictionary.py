@@ -28,17 +28,33 @@ def parse_netlist(file_path):
                 continue
 
             tokens = line.split()
-            if len(tokens) < 4:
-                raise ValueError(f"Invalid netlist line: {line}")
+            
+            # Process a Isource or Resistor (2 nodes)
+            if len(tokens) == 4:
+                name, n1, n2, value_str = tokens[0], tokens[1], tokens[2], tokens[3]
+                n1 = int(n1)
+                n2 = int(n2)
+                n3 = 0
+                n4 = 0
 
-            name, n1, n2, value_str = tokens[0], tokens[1], tokens[2], tokens[3]
+            # Process a VCCS (4 nodes)
+            elif len(tokens) == 6:
+                name, n1, n2, n3, n4, value_str = tokens[0], tokens[1], tokens[2], tokens[3], tokens[4], tokens[5]
+                n1 = int(n1)
+                n2 = int(n2)
+                n3 = int(n3)
+                n4 = int(n4)
+
+            else:
+                raise ValueError(f"Invalid netlist line: {line}")
+            
 
             # Convert nodes to integers if possible (assuming '0' is ground)
-            n1 = int(n1)
-            n2 = int(n2)
+            '''n1 = int(n1)
+            n2 = int(n2)'''
             value = parse_value(value_str)
 
-            components[name] = {"n1": n1, "n2": n2, "value": value}
+            components[name] = {"n1": n1, "n2": n2, "n3": n3, "n4": n4, "value": value}
 
     return components
 
