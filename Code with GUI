@@ -1,0 +1,172 @@
+import numpy as np
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext
+from scipy.sparse import lil_matrix
+from scipy.sparse.linalg import spsolve
+
+# ==========================================
+# 1. CORE SOLVER LOGIC
+# ==========================================
+def parse_value(value_str):
+    multipliers = {'k': 1e3, 'm': 1e-3, 'u': 1e-6, 'n': 1e-9, 'p': 1e-12, 'M': 1e6}
+    value_str = value_str.lower().strip()
+    if value_str[-1] in multipliers:
+        return float(value_str[:-1]) * multipliers[value_str[-1]]
+    return float(value_str)
+
+def parse_netlist(file_path):
+    components = {}
+    with open(file_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            # Ignore comments, empty lines, brackets, or headers
+            if not line or line.startswith('*') or line.startswith('['):
+                continue
+
+            tokens = line.split()
+            try:
+                n3, n4 = 0, 0
+                if len(tokens) == 4: # R, I
+                    name, n1, n2, val_str = tokens[0], tokens[1], tokens[2], tokens[3]
+                    n1, n2 = int(n1), int(n2)
+                elif len(tokens) == 6: # G (VCCS)
+                    name, n1, n2, n3, n4, val_str = tokens[0], tokens[1], tokens[2], tokens[3], tokens[4], tokens[5]
+                    n1, n2, n3, n4 = int(n1), int(n2), int(n3), int(n4)
+                else:
+                    continue
+                
+                value = parse_value(val_str)
+                components[name] = {"n1": n1, "n2": n2, "n3": n3, "n4": n4, "value": value}
+            except ValueError:
+                continue
+    return components
+
+def build_node_index(components):
+    nodes = set()
+    for comp in components.values():
+        if comp["n1"] != 0: nodes.add(comp["n1"])
+        if comp["n2"] != 0: nodes.add(comp["n2"])
+        if comp["n3"] != 0: nodes.add(comp["n3"])
+        if comp["n4"] != 0: nodes.add(comp["n4"])
+    node_list = sorted(list(nodes))
+    return {node: idx for idx, node in enumerate(node_list)}, len(node_list)
+
+def invert_node_index(node_index):
+    return {i: node for node, i in node_index.items()}
+
+def generate_stamps(components, node_index):
+    N = len(node_index)
+    Y = lil_matrix((N, N), dtype=float)
+    I = np.zeros(N)
+
+    for name, comp in components.items():
+        n1, n2, n3, n4, val = comp["n1"], comp["n2"], comp["n3"], comp["n4"], comp["value"]
+        
+        # Resistor Stamp
+        if name.upper().startswith("R"):
+            if val == 0: continue
+            g = 1.0 / val
+            if n1 != 0: Y[node_index[n1], node_index[n1]] += g
+            if n2 != 0: Y[node_index[n2], node_index[n2]] += g
+            if n1 != 0 and n2 != 0:
+                Y[node_index[n1], node_index[n2]] -= g
+                Y[node_index[n2], node_index[n1]] -= g
+        
+        # Current Source Stamp
+        elif name.upper().startswith("I"):
+            if n1 != 0: I[node_index[n1]] -= val
+            if n2 != 0: I[node_index[n2]] += val
+            
+        # VCCS Stamp
+        elif name.upper().startswith("G"):
+            if n1 != 0:
+                if n3 != 0: Y[node_index[n1], node_index[n3]] += val
+                if n4 != 0: Y[node_index[n1], node_index[n4]] -= val
+            if n2 != 0:
+                if n3 != 0: Y[node_index[n2], node_index[n3]] -= val
+                if n4 != 0: Y[node_index[n2], node_index[n4]] += val
+
+    return Y.tocsr(), I
+
+def solve_circuit(file_path):
+    components = parse_netlist(file_path)
+    if not components:
+        raise ValueError("No valid components found in file.")
+        
+    node_index, N = build_node_index(components)
+    Y, I = generate_stamps(components, node_index)
+    V = spsolve(Y, I)
+    
+    index_node = invert_node_index(node_index)
+    voltages = {0: 0.0}
+    for i, v in enumerate(V):
+        voltages[index_node[i]] = v
+    return voltages
+
+# ==========================================
+# 2. GUI INTERFACE
+# ==========================================
+class CircuitApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Python Circuit Solver")
+        self.root.geometry("500x400")
+        
+        # Title Label
+        lbl_title = tk.Label(root, text="DC Nodal Analysis Solver", font=("Arial", 16, "bold"))
+        lbl_title.pack(pady=10)
+        
+        # Upload Button
+        btn_load = tk.Button(root, text="Load Netlist File (.txt)", 
+                             command=self.load_file, 
+                             font=("Arial", 12), bg="#DDDDDD", relief="raised")
+        btn_load.pack(pady=5)
+        
+        # File Name Label
+        self.lbl_filename = tk.Label(root, text="No file selected", fg="gray")
+        self.lbl_filename.pack(pady=5)
+        
+        # Output Text Area
+        self.txt_output = scrolledtext.ScrolledText(root, width=50, height=15, font=("Consolas", 10))
+        self.txt_output.pack(padx=10, pady=10)
+        
+    def load_file(self):
+        # Open File Dialog
+        file_path = filedialog.askopenfilename(
+            title="Select Netlist File",
+            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
+        )
+        
+        if not file_path:
+            return # User cancelled
+        
+        self.lbl_filename.config(text=f"Loaded: {file_path.split('/')[-1]}")
+        self.txt_output.delete(1.0, tk.END) # Clear previous results
+        self.txt_output.insert(tk.END, f"Analyzing...\n")
+        
+        try:
+            # Run the Solver
+            results = solve_circuit(file_path)
+            
+            # Display Results
+            output_str = "\n" + "="*30 + "\n"
+            output_str += "  FINAL NODAL VOLTAGES\n"
+            output_str += "="*30 + "\n"
+            
+            for node in sorted(results):
+                output_str += f"  Node {node:<4}: {results[node]:.6f} V\n"
+            
+            self.txt_output.delete(1.0, tk.END)
+            self.txt_output.insert(tk.END, output_str)
+            
+        except Exception as e:
+            messagebox.showerror("Simulation Error", f"Failed to solve circuit:\n\n{str(e)}")
+            self.txt_output.insert(tk.END, "\nAnalysis Failed.")
+
+# ==========================================
+# 3. RUN APP
+# ==========================================
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = CircuitApp(root)
+    root.mainloop()
