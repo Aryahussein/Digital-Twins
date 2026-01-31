@@ -52,7 +52,7 @@ def dc_nodal_analysis(netlist, w = 0):
                 print(f"{name}: {mag:.6f} A ∠ {phase:.2f}°")
     
 
-def run_bode_plot(netlist_file, output_node, start_freq=10, stop_freq=100000, points=100):
+def run_bode_plot(netlist_file, output_node, start_freq=10, stop_freq=100000, points=100, name="bodeplot"):
     """
     Runs a frequency sweep and plots Magnitude (dB) and Phase.
     
@@ -123,11 +123,12 @@ def run_bode_plot(netlist_file, output_node, start_freq=10, stop_freq=100000, po
     
     plt.tight_layout()
     plt.show()
+    plt.savefig(f"./figures/ac/{name}.png", dpi = 600, bbox_inches = "tight" )
 
 if __name__ == "__main__":
     test_directory = "testfiles/"
     # netlist = "testfiles/test_with_vccs.txt"
     # dc_nodal_analysis(netlist)
     # Example Bode Plot
-    run_bode_plot(test_directory + "ac_lowpass.txt", output_node=2, start_freq=10, stop_freq=100000, points=200)
-    run_bode_plot(test_directory + "ac_resonance.txt", output_node=3, start_freq=10, stop_freq=100000, points=200)
+    run_bode_plot(test_directory + "ac_lowpass.txt", output_node=2, start_freq=10, stop_freq=100000, points=200, name = "lowpass")
+    run_bode_plot(test_directory + "ac_resonance.txt", output_node=3, start_freq=10, stop_freq=100000, points=200, name = "resonance")
