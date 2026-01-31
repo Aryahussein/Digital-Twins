@@ -1,0 +1,5 @@
+* Example circuit from lecture slides
+
+I1 0 1 1
+R1 1 2 1
+R2 0 2 1
