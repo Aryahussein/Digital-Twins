@@ -37,6 +37,7 @@ def parse_value(val):
 resistors = []      # (n1, n2, R)
 currents = []       # (n+, n-, I)
 voltages = []       # (name, n+, n-, V)
+vccs = []   # (n+, n-, nc+, nc-, gm)
 nodes = set()
 
 # ==========================================================
@@ -65,6 +66,11 @@ with open(NETLIST_FILE, "r") as f:
             _, np, nm, val = tokens
             voltages.append((name, np, nm, parse_value(val)))
             nodes.update([np, nm])
+        elif name[0].upper() == 'G':
+            _, np, nm, ncp, ncm, val = tokens
+            vccs.append((np, nm, ncp, ncm, parse_value(val)))
+            nodes.update([np, nm, ncp, ncm])
+
 
 # Ground handling
 nodes.discard("0")
@@ -107,6 +113,32 @@ for n1, n2, R in resistors:
         j = node_idx[n2]
         G[i, j] -= g
         G[j, i] -= g
+
+# ==========================================================
+# Stamp VCCS (Voltage Controlled Current Sources)
+# ==========================================================
+for np, nm, ncp, ncm, gm in vccs:
+
+    def idx(n):
+        return node_idx[n] if n != "0" else None
+
+    p  = idx(np)
+    m  = idx(nm)
+    cp = idx(ncp)
+    cm = idx(ncm)
+
+    # Contribution to node n+
+    if p is not None and cp is not None:
+        G[p, cp] += gm
+    if p is not None and cm is not None:
+        G[p, cm] -= gm
+
+    # Contribution to node n-
+    if m is not None and cp is not None:
+        G[m, cp] -= gm
+    if m is not None and cm is not None:
+        G[m, cm] += gm
+
 
 # ==========================================================
 # Stamp current sources
@@ -208,6 +240,43 @@ if M == 0:
         print(e)
 
 else:
-    print("\n=========== LU SOLVE SKIPPED ===========")
-    print("Reason: Ideal voltage source present.")
-    print("Use full MNA system (A·X = Z) instead.")
+    # ==========================================================
+    # Solve full MNA system A·X = Z using LU (voltage sources)
+    # ==========================================================
+    if M > 0:
+        print("\n=========== SOLVING FULL MNA SYSTEM A·X = Z USING LU ===========")
+
+        try:
+            # LU decomposition of full MNA matrix
+            L, U, perm = A.LUdecomposition()
+
+            print("\nL matrix:")
+            sp.pprint(L)
+
+            print("\nU matrix:")
+            sp.pprint(U)
+
+            # Solve system
+            X_sol = A.LUsolve(Z)
+
+            print("\n=========== SOLUTION VECTOR X ===========")
+            sp.pprint(X_sol)
+
+            # --------------------------------------------------
+            # Extract node voltages
+            # --------------------------------------------------
+            print("\n=========== NODE VOLTAGE SOLUTION ===========")
+            for n, v in zip(nodes, X_sol[:N]):
+                sp.pprint(sp.Eq(sp.symbols(f"V{n}"), v))
+
+            # --------------------------------------------------
+            # Extract voltage source currents
+            # --------------------------------------------------
+            print("\n=========== VOLTAGE SOURCE CURRENTS ===========")
+            for (name, _, _, _), iv in zip(voltages, X_sol[N:]):
+                sp.pprint(sp.Eq(sp.symbols(f"I_{name}"), iv))
+
+        except Exception as e:
+            print("\nMNA LU solve failed:")
+            print(e)
+
