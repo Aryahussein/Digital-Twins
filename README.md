@@ -9,3 +9,5 @@ Progress -
 3. 1/30 - Added Voltage source solving capability by using the same LU decomposition technique - checked with a voltage divider circuit
 4. 1/31 - Checked with multiple sources (current+votlage) in the same circuit to check compatibility - works!
 5. 2/1 - Added VCCS source
+6. 2/4 - Added 2 new files - dc_sovler.py and ac_solver.py which you can choose like you do on the spice netlists: .op - for dc and .ac for ac analysis.
+7. 2/5 - made a main.py which reads netlist -> and picks the solver based on the netlist. Plots bode plots using matplotlib for ac solver.
