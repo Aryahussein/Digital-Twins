@@ -182,6 +182,46 @@ def BE_companion_model_inductor(Y, I, n1, n2, L, node_index, I_hist, dt):
     stamp_current_source(I, n1, n2, Ieq, node_index)
 
 
+def trapz_companion_model_capacitor(Y, I, n1, n2, C, node_index, V_hist, I_hist, dt):
+    """
+    Build trapezoid companion model as in book page 83, figure 4.11 c).
+    :param Y:   admittance matrix
+    :param I:   current vector
+    :param n1:  node 1
+    :param n2:  node 2
+    :param C:   capacitance (F)
+    :param node_index:  keeps track of the internal indexing
+    :param V_hist:  Previous iteration's solution vector V: V(n)
+    :param I_hist:  Previous iteration's current vector I:I(n).
+    :param dt:  timestep
+    :return:
+    """
+    Geq = 2 * C / dt
+    stamp_resistor(Y, n1, n2, 1 / Geq, node_index)
+    # Not sure about the sign tbh... (use positive and hope that it just gives a negative value if I chose wrong)
+    Ieq = I_hist[node_index[n1]] + Geq * (V_hist[node_index[n2]] - V_hist[node_index[n2]])
+    stamp_current_source(I, n1, n2, Ieq, node_index)
+
+def trapz_companion_model_inductor(Y, I, n1, n2, L, node_index, V_hist, I_hist, dt):
+    """
+    Build trapezoid companion model as in book page 86, figure 4.15 b).
+    :param Y:   admittance matrix
+    :param I:   current vector
+    :param n1:  node 1
+    :param n2:  node 2
+    :param L:   inductance (H)
+    :param node_index:  keeps track of the internal indexing
+    :param V_hist:  Previous iteration's solution vector V: V(n)
+    :param I_hist:  Previous iteration's current vector I:I(n).
+    :param dt:  timestep
+    :return:
+    """
+    Geq = dt / (2 * L)
+    stamp_resistor(Y, n1, n2, 1 / Geq, node_index)
+    # Not sure about the sign tbh... (use positive and hope that it just gives a negative value if I chose wrong)
+    Ieq = I_hist[node_index[n1]] + Geq * (V_hist[node_index[n2]] - V_hist[node_index[n1]])
+    stamp_current_source(I, n1, n2, Ieq, node_index)
+
 def generate_stamps(components, node_index, mna_index, total_dim, w=0):
     """
     w: Angular frequency (rad/s). Set to 0 for DC.
