@@ -142,6 +142,45 @@ def stamp_vccs(Y, n1, n2, n3, n4, value, node_index):
         y = node_index[n4]
         Y[k,y] += value
 
+def BE_companion_model_capacitor(Y, I, n1, n2, C, node_index, V_hist, dt):
+    """
+    Build backward euler companion model as in slide 13 Lecture 4. Introduce Norton equivalent circuit with independent current source
+    Ieq and equivalent conductance Geq.
+    :param Y:   admittance matrix
+    :param I:   current vector
+    :param n1:  node 1
+    :param n2:  node 2
+    :param C:   capacitance (F)
+    :param node_index:  keeps track of the internal indexing
+    :param V_hist:  Previous iteration's solution vector V: V(n)
+    :param dt:  timestep
+    :return:
+    """
+    Geq = C / dt
+    stamp_resistor(Y, n1, n2, 1 / Geq, node_index)
+    # Not sure about the sign tbh... (use positive and hope that it just gives a negative value if I chose wrong)
+    Ieq = Geq * (V_hist[n2] - V_hist[n1])
+    stamp_current_source(I, n1, n2, Ieq, node_index)
+
+def BE_companion_model_inductor(Y, I, n1, n2, L, node_index, I_hist, dt):
+    """
+    Build backward euler companion model as in book page 85, figure 4.14 b).
+    :param Y:   admittance matrix
+    :param I:   current vector
+    :param n1:  node 1
+    :param n2:  node 2
+    :param L:   inductance (H)
+    :param node_index:  keeps track of the internal indexing
+    :param I_hist:  Previous iteration's current vector I(n).
+    :param dt:  timestep
+    :return:
+    """
+    Geq = dt / L
+    stamp_resistor(Y, n1, n2, 1 / Geq, node_index)
+    # Not sure about the sign tbh... (use positive and hope that it just gives a negative value if I chose wrong)
+    Ieq = I_hist[n1]
+    stamp_current_source(I, n1, n2, Ieq, node_index)
+
 
 def generate_stamps(components, node_index, mna_index, total_dim, w=0):
     """
