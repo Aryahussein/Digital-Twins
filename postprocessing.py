@@ -1,15 +1,14 @@
 from node_index import invert_node_index
 
+
 def map_voltages(V, node_index):
     """
-       Maps the internal nodes back to the user-defined
-       nodes and returns the voltage corresponding to
-       that user-defined node:
-           node_index: dict {node_number: index}
-           V: vector containing nodal voltages
-       """
-    index_node = invert_node_index(node_index)
-    voltages = {0: 0.0}
-    for i, v in enumerate(V):
-        voltages[index_node[i]] = v
+    Maps the internal matrix indices back to user-defined node numbers.
+    V: solution vector (contains Node Voltages AND Branch Currents)
+    node_index: dict {node_number: index}
+    """
+    voltages = {0: 0.0} # Initialize ground
+    for node, idx in node_index.items():
+        voltages[node] = V[idx]
+        
     return voltages
