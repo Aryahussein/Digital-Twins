@@ -168,4 +168,4 @@ def generate_stamps(components, node_map, total_dim, w=0):
         elif name.startswith("L"):
             stamp_inductor(Y, n1, n2, val, w, name, node_map)
 
-    return Y.tocsr(), sources
+    return Y.tocsc(), sources
