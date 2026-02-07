@@ -6,6 +6,48 @@ from solver import solve_sparse
 from postprocessing import map_voltages
 from assembleYmatrix import generate_stamps
 
+def print_solution(V, node_map, w=0):
+    """
+    Prints the solution vector V using the unified node_map.
+    Automatically distinguishes between Voltages (node keys) and Currents (string keys).
+    """
+    print(f"\n--- Simulation Results ({'DC' if w == 0 else f'AC @ {w/(2*np.pi):.2f} Hz'}) ---")
+    
+    # Separate the map into nodes and MNA components for organized printing
+    # (Assuming nodes are stored as integers/strings like 'node_1' 
+    # and MNA as component names like 'V1')
+    nodes = []
+    branches = []
+    
+    for key, idx in node_map.items():
+        if isinstance(key, int): # It's a node number
+            nodes.append((key, idx))
+        else: # It's an MNA component name (V or L)
+            branches.append((key, idx))
+
+    # 1. Print Node Voltages
+    print("Node Voltages:")
+    for node, idx in sorted(nodes):
+        val = V[idx]
+        if w == 0:
+            print(f"  Node {node}: {val.real:10.6f} V")
+        else:
+            mag = np.abs(val)
+            phase = np.degrees(np.angle(val))
+            print(f"  Node {node}: {mag:10.6f} V ∠ {phase:7.2f}°")
+
+    # 2. Print Branch Currents
+    if branches:
+        print("\nBranch Currents:")
+        for name, idx in sorted(branches):
+            val = V[idx]
+            if w == 0:
+                print(f"  {name:7}: {val.real:10.6f} A")
+            else:
+                mag = np.abs(val)
+                phase = np.degrees(np.angle(val))
+                print(f"  {name:7}: {mag:10.6f} A ∠ {phase:7.2f}°")
+
 def run_bode_plot(netlist_file, output_node, start_freq=10, stop_freq=100000, points=100, name="bodeplot"):
     """
     Runs a frequency sweep and plots Magnitude (dB) and Phase.
@@ -19,7 +61,7 @@ def run_bode_plot(netlist_file, output_node, start_freq=10, stop_freq=100000, po
     
     # 1. Parse Netlist Once
     components = parse_netlist(netlist_file)
-    node_index, mna_index, total_dim = build_node_index(components)
+    node_index, total_dim = build_node_index(components)
     
     # 2. Setup Frequency Range (Logarithmic spacing)
     frequencies = np.logspace(np.log10(start_freq), np.log10(stop_freq), points)
@@ -33,7 +75,7 @@ def run_bode_plot(netlist_file, output_node, start_freq=10, stop_freq=100000, po
         w = 2 * np.pi * f  # Convert Hz to Rad/s
         
         # Build Matrix for this specific frequency w
-        Y, I = generate_stamps(components, node_index, mna_index, total_dim, w=w)
+        Y, I = generate_stamps(components, node_index, total_dim, w=w)
         
         # Solve
         solution = solve_sparse(Y, I)
