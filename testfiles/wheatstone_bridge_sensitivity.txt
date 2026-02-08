@@ -1,0 +1,7 @@
+* Wheatstone Bridge near Balance
+V1 1 0 10
+R1 1 2 1000
+R2 2 0 1000
+R3 1 3 1000
+R4 3 0 1001
+* Output is V(2,3) -> Node 2 minus Node 3

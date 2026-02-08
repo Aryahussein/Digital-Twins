@@ -1,25 +1,35 @@
 def build_node_index(components):
     """
-    Builds a mapping from node numbers (excluding ground '0') to matrix indices.
+    Builds a single mapping for all unknowns (voltages and currents).
+    
     Returns:
-        node_index: dict {node_number: index}
-        N: total number of unknown nodes
+        var_map: dict {name_or_node: matrix_index}
+        total_dim: total size of the matrix
     """
     nodes = set()
     for comp in components.values():
-        if comp["n1"] != 0:
-            nodes.add(comp["n1"])
-        if comp["n2"] != 0:
-            nodes.add(comp["n2"])
-        if comp["n3"] != 0:
-            nodes.add(comp["n3"])
-        if comp["n4"] != 0:
-            nodes.add(comp["n4"])
+        for key in ["n1", "n2", "n3", "n4"]:
+            val = comp.get(key, 0)
+            if val != 0:
+                nodes.add(val)
 
     node_list = sorted(nodes)
-    node_index = {node: idx for idx, node in enumerate(node_list)}
-    N = len(node_list)
-    return node_index, N
+    node_map = {}
+    current_idx = 0
+
+    # 1. Map Nodes (Voltages)
+    for node in node_list:
+        node_map[node] = current_idx
+        current_idx += 1
+
+    # 2. Map MNA Components (Branch Currents)
+    for name in components:
+        if name.startswith(("V", "L")):
+            node_map[name] = current_idx
+            current_idx += 1
+            
+    total_dim = current_idx
+    return node_map, total_dim
 
 def invert_node_index(node_index):
     return {i: node for node, i in node_index.items()}

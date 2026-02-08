@@ -2,7 +2,7 @@ def parse_value(value_str):
     """
     Convert a value string with units like 'k', 'm', 'u' to float.
     """
-    multipliers = {'k': 1e3, 'm': 1e-3, 'u': 1e-6, 'n': 1e-9, 'p': 1e-12}
+    multipliers = {'M': 1e6, 'k': 1e3, 'm': 1e-3, 'u': 1e-6, 'n': 1e-9, 'p': 1e-12}
     value_str = value_str.lower().strip()
 
     if value_str[-1] in multipliers:
