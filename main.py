@@ -39,7 +39,7 @@ def do_sensitivity_analysis(lu, VI, output_node, node_map, total_dim, w=0):
 
 if __name__ == "__main__":
     test_directory = "testfiles/"
-    netlist = test_directory + "/notch_filter_sensitivity.txt"
+    netlist = test_directory + "/ac_lowpass.txt"
 
     w = 2*np.pi * 60
     # w = 0
@@ -58,8 +58,11 @@ if __name__ == "__main__":
     print_solution(VI, node_map, w=w)
 
     # select output node for adjoint input
-    output_node_for_sensitivity = 3
+    output_node_for_sensitivity = 2
     sensitivities, std_dev = do_sensitivity_analysis(lu, VI, output_node_for_sensitivity, node_map, total_dim, w=w)
+    print("Sensitivities of components:")
+    for name, sens in sensitivities.items():
+        print(f"{name}: {sens:.4f} V/unit")
     print(f"output voltage V = {VI[node_map[output_node_for_sensitivity]]} $\pm$ {std_dev} V")
 
     # # Example Bode Plot
@@ -67,8 +70,8 @@ if __name__ == "__main__":
     # run_bode_plot(test_directory + "ac_resonance.txt", output_node=3, start_freq=10, stop_freq=100000, points=200, name = "resonance")
 
     # Example ac sensitivity
-    print("do sweep")
-    plot_sensitivity_sweep(components, output_node_for_sensitivity, "R1", start_f=10, end_f=1000, name="sensitiviy")
+    # print("do sweep")
+    plot_sensitivity_sweep(components, output_node_for_sensitivity, "C1", start_f=10, end_f=1000, name="lowpass_C1_sensitivity")
 
     
 

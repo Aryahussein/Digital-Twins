@@ -157,16 +157,26 @@ def plot_sensitivity_sweep(components, output_node, target_component, start_f=10
         v_out_mags.append(np.abs(VI[node_map[output_node]]))
         sens_mags.append(np.abs(s[target_component]))
 
+    v_out_mags = np.array(v_out_mags)
+    sens_mags = np.array(sens_mags)
+
     # Plotting
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 4), sharex=True)
     
-    ax1.semilogx(freqs, v_out_mags, lw=2)
-    ax1.set_ylabel("Output Magnitude |Vout| (V)")
-    ax1.set_title("Twin-T Notch Filter Response")
+    mag_db = 20 * np.log10(v_out_mags)
+    ax1.semilogx(freqs, mag_db, lw=2)
+    # ax1.set_ylabel("Output Magnitude |Vout| (V)")
+    ax1.set_ylabel("Magnitude (dB)")
+    # ax1.set_title("Twin-T Notch Filter Response")
     ax1.grid(True, which="both", ls="-", alpha=0.5)
 
+    max_gain = np.max(mag_db)
+    print(f"Max Gain: {max_gain:.4f} dB")
+    ax1.axhline(max_gain - 3, color='r', linestyle='--', alpha=0.5, label="-3dB line")
+    ax1.legend()
+
     ax2.semilogx(freqs, sens_mags, color='red', lw=2)
-    ax2.set_ylabel("Sensitivity |dVout / dR1|")
+    ax2.set_ylabel(f"Sensitivity |dVout / d{target_component}|")
     ax2.set_xlabel("Frequency (Hz)")
     ax2.set_title("Sensitivity vs. Frequency")
     ax2.grid(True, which="both", ls="-", alpha=0.5)
