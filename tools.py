@@ -9,7 +9,7 @@ from postprocessing import map_voltages
 from assembleYmatrix import generate_stamps
 
 
-def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0):
+def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0):
     sensitivities = {}
 
     for name, comp in components.items():
@@ -173,7 +173,7 @@ def plot_sensitivity_sweep(components, output_node, target_component, start_f=10
 
     fig.savefig(f"./figures/ac/{name}.png", dpi = 600, bbox_inches = "tight" )
 
-def print_solution(V, node_map, w=0):
+def print_solution(V, node_map, w=0.0):
     """
     Prints the solution vector V using the unified node_map.
     Automatically distinguishes between Voltages (node keys) and Currents (string keys).
