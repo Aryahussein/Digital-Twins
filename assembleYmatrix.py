@@ -132,12 +132,55 @@ def stamp_vccs(Y, n1, n2, n3, n4, value, node_map):
         if x is not None: Y[k, x] -= value
         if y is not None: Y[k, y] += value
 
+def stamp_capacitor_backward_euler(G, b, comp, dt, v_prev, node_map):
+    """
+    Stamp a capacitor into the MNA matrix using Backward Euler.
+
+    Parameters:
+        G       : Admittance matrix (numpy array)
+        b       : RHS vector (numpy array)
+        comp    : Component dictionary entry for capacitor
+        dt      : Time step
+        v_prev  : Previous timestep node voltage vector
+    """
+
+    n1 = comp["n1"]
+    n2 = comp["n2"]
+    C = comp["value"]
+
+    # Equivalent conductance
+    G_eq = C / dt
+
+    i1 = get_idx(n1, node_map)
+    i2 = get_idx(n2, node_map)
+
+    # Voltage difference from previous timestep
+    v1_prev = v_prev[i1] if i1 is not None else 0.0
+    v2_prev = v_prev[i2] if i2 is not None else 0.0
+
+    I_eq = G_eq * (v1_prev - v2_prev)
+
+    # Stamp conductance matrix
+    if i1 is not None:
+        G[i1, i1] += G_eq
+    if i2 is not None:
+        G[i2, i2] += G_eq
+    if i1 is not None and i2 is not None:
+        G[i1, i2] -= G_eq
+        G[i2, i1] -= G_eq
+
+    # Stamp RHS vector
+    if i1 is not None:
+        b[i1] += I_eq
+    if i2 is not None:
+        b[i2] -= I_eq
+
 def generate_stamps(components, node_map, total_dim, w=0):
     """
     w: Angular frequency (rad/s). Set to 0 for DC.
     """
     # Matrix must be complex to handle AC, even if w=0
-    dtype = float if w==0 else complex
+    dtype = float if w == 0 else complex
     Y = lil_matrix((total_dim, total_dim), dtype=dtype)
     sources = np.zeros(total_dim, dtype=dtype)
 
@@ -167,5 +210,41 @@ def generate_stamps(components, node_map, total_dim, w=0):
 
         elif name.startswith("L"):
             stamp_inductor(Y, n1, n2, val, w, name, node_map)
+
+    return Y.tocsc(), sources
+
+def generate_stamps_transient(components, node_map, total_dim, v_hist, dt, method):
+    """
+        w: Angular frequency (rad/s). Set to 0 for DC.
+        """
+    # Matrix must be complex to handle AC, even if w=0
+    dtype = float
+    Y = lil_matrix((total_dim, total_dim), dtype=dtype)
+    sources = np.zeros(total_dim, dtype=dtype)
+
+    for name, comp in components.items():
+        # Extract basic nodes (default to 0 if not present)
+        n1 = comp.get("n1", 0)
+        n2 = comp.get("n2", 0)
+        n3 = comp.get("n3", 0)
+        n4 = comp.get("n4", 0)
+        val = comp["value"]
+
+        if name.startswith("R"):
+            stamp_resistor(Y, n1, n2, val, node_map)
+
+        elif name.startswith("C"):
+            if method == "BE":
+                stamp_capacitor_backward_euler(Y, sources, comp, dt, v_hist, node_map)
+
+        elif name.startswith("I"):
+            stamp_current_source(sources, n1, n2, val, node_map)
+
+        elif name.startswith("G"):
+            stamp_vccs(Y, n1, n2, n3, n4, val, node_map)
+
+        elif name.startswith("V"):
+            # We pass 'name' (e.g., 'V1') to look up its MNA row
+            stamp_independent_voltage(Y, sources, n1, n2, val, name, node_map)
 
     return Y.tocsc(), sources
