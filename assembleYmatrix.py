@@ -162,7 +162,7 @@ def stamp_diode(Y, sources, n1, n2, Is, p_V_guess, V_guess, node_map):
     p_vd_k = p_v1 - p_v2
 
     # limit the amount v can jump at a time & prevent overflows
-    n_vd_k = pnjlim(vd_k, p_vd_k, 5)
+    n_vd_k = pnjlim(vd_k, p_vd_k, 1)
 
     # 1. Calculate linearization components
     exp_term = np.exp(n_vd_k / Vt)

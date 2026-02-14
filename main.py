@@ -64,7 +64,7 @@ if __name__ == "__main__":
         V_guess = np.zeros(total_dim)
         max_iter = 100
         tol = 1e-9
-        num_ramp_steps = 2
+        num_ramp_steps = 10
         lu, VI = solve_nonlinear_circuit(Y, sources, components, node_map, total_dim, V_guess, max_iter=max_iter, tol=tol, num_steps=num_ramp_steps)
     else:
         lu, VI = solve_linear_circuit(Y, sources)

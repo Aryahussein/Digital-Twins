@@ -41,10 +41,9 @@ def solve_nonlinear_circuit(Y_ori, sources_ori, components, node_map, total_dim,
         Y_k = Y_ori.copy()
         
         for i in range(max_iter):
-            # 1. Generate linearized Y and I for the current guess V_k
-            # Sources in I_rhs should be multiplied by k_factor inside generate_stamps
             prev_V_k = V_k.copy()
             
+            # 1. Generate linearized Y and I for the current guess V_k
             Y_iter, sources_iter = update_nonlinear_stamps(Y_k, sources_k, components, node_map, prev_V_k, V_k)
             
             # 2. Solve the linear system
@@ -56,7 +55,7 @@ def solve_nonlinear_circuit(Y_ori, sources_ori, components, node_map, total_dim,
             max_error = np.max(delta_v)
             
             V_k = V_new # Update guess for next iteration
-            
+            print(f"Iteration: {i}, error = {max_error}")
             if max_error < tol:
                 print(f"Converged in {i+1} iterations.")
                 break
