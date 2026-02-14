@@ -76,7 +76,7 @@ if __name__ == "__main__":
     store_current = np.zeros(1000000)
     store_time = np.zeros(1000000)
 
-    ########### use a fake solve where the current is 0A and voltage is 0A to mimic an initial condition where Vsource=0V
+    ########### use a fake solve where the current is 0A and voltage is 0A to mimic an initial condition where Vsource=10V but capacitor is charged to 1V
     VI = np.zeros(total_dim)
     VI[0] = 10
     VI[1] = 1
@@ -84,50 +84,51 @@ if __name__ == "__main__":
     print("/n/n/n")
     print_solution(VI, node_map, w=w)
 
-    # DC-solved Y is permanent, but we add the Thevenin equivalent for Trapezoidal Approximation to it 
-        # Thevenin equivalent is an R=timestep/C in series with a Vsource=Vnode
+    # DC-solved "Y" and "sources" matrices are permanent, but we add the Norton equivalent for Back Euler Approximation to it 
+        # Norton equivalent is used
     Y_temp = Y.copy()
-
-
-
     sources_temp = sources.copy()
 
     
     store_time[1] = transient_timestep
+
+    # Step through transient time 'num_steps' number of times
     for tran_step_count in range(1, num_steps):
         ###print(f"\n\n\n tran_step_count = {tran_step_count}")
         store_time[tran_step_count] = transient_timestep + store_time[tran_step_count-1]
+        
+        # Reset the Y_temp matrix to Y matrix (which then has the capacitor/inductor stamps added onto it)
         Y_temp = Y.copy()
+
+        # Reset the sources_temp matrix to sources matrix (which then has the capacitor/inductor stamps added onto it)
         sources_temp = sources.copy()
 
+        # Stamp capacitor & inductor Back Euler approximations
         for name, comp in components.items():
             val = comp["value"]
 
             n1 = comp.get("n1", 0)
             n2 = comp.get("n2", 0)
 
+            # Stamp the Capacitor Back Euler approximation
             if name.startswith("C"):
                 
                 # Find the voltage from the previous timestep solved
                 if n1:
                     cap_voltage_n1 = VI[n1-1]
-                else:
+                else:                               # voltage is 0V if n2 is ground
                     cap_voltage_n1 = 0
-
                 if n2:
                     cap_voltage_n2 = VI[n2-1]
-                else:
+                else:                               # voltage is 0V if n2 is ground
                     cap_voltage_n2 = 0
 
-                cap_voltage = cap_voltage_n2 - cap_voltage_n1       #### Note - might be the wrong way around
+                cap_voltage = cap_voltage_n2 - cap_voltage_n1
 
                 ###print(f"cap_voltage = {cap_voltage} where \n       n1_index is {n1} and cap_voltage_n1= {cap_voltage_n1}  \n       n2_index is {n2} and cap_voltage_n2= {cap_voltage_n2}")
 
                 # Stamp capacitor admittance and add current for Back Euler approximation
                 stamp_capacitor_transient(Y_temp, sources_temp, n1, n2, val, node_map, transient_timestep, cap_voltage)
-
-        ###print(f"Y = {Y}")
-        ###print(f"sources_temp = {sources_temp}")
 
         lu = solve_LU(Y_temp)
         VI = get_node_and_branch_currents(lu, sources_temp)
@@ -141,10 +142,10 @@ if __name__ == "__main__":
     
     
     
-    '''
-    lu = solve_LU(Y_temp)
-    VI_temp = get_node_and_branch_currents(lu, sources_temp)
-    print_solution(VI_temp, node_map, w=w)'''
+    
+    ###lu = solve_LU(Y_temp)
+    ###VI_temp = get_node_and_branch_currents(lu, sources_temp)
+    ###print_solution(VI_temp, node_map, w=w)
     
     for i in range(0, num_steps):
         if i % 1000 == 0:
@@ -153,7 +154,7 @@ if __name__ == "__main__":
     
 
 
-    plot_transient(store_time, store_voltage, points=num_steps, name="transient_RC")
+    plot_transient(store_time, store_voltage, name="transient_RC")
 
 
 

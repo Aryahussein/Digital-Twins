@@ -225,44 +225,14 @@ def print_solution(V, node_map, w=0):
                 phase = np.degrees(np.angle(val))
                 print(f"  {name:7}: {mag:10.6f} A angle {phase:7.2f}deg")
 
-def plot_transient(x_axis, y_axis, points=100, name="transient"):
+def plot_transient(x_axis, y_axis, name="transient"):
     """
     Plots the transient simulation results.
     
-    netlist_file: Path to the .txt file
-    output_node: The integer node ID to plot (e.g., 2)
-    start_freq: Start Hz
-    stop_freq: Stop Hz
-    points: Number of steps
-    """
+    x_axis: time array
+    y_axis: output voltage/current array
+   """
     
-
-    # Plotting
-    ###fig, (ax1) = plt.subplots(2, 1, figsize=(5, 4), sharex=True)
-    ###ax1.semilogx(x_axis, y_axis, lw=2)
-    
-
-    '''mag_db = 20 * np.log10(y_axis)
-    ax1.semilogx(x_axis, mag_db, lw=2)
-    # ax1.set_ylabel("Output Magnitude |Vout| (V)")
-    ax1.set_ylabel("Vout")
-    # ax1.set_title("Twin-T Notch Filter Response")
-    ax1.grid(True, which="both", ls="-", alpha=0.5)
-
-    max_gain = np.max(mag_db)
-    print(f"Max Gain: {max_gain:.4f} dB")
-    ax1.axhline(max_gain - 3, color='r', linestyle='--', alpha=0.5, label="-3dB line")
-    ax1.legend()'''
-    
-    '''
-    ax2.semilogx(freqs, sens_mags, color='red', lw=2)
-    ax2.set_ylabel(f"Sensitivity |dVout / d{target_component}|")
-    ax2.set_xlabel("Frequency (Hz)")
-    ax2.set_title("Sensitivity vs. Frequency")
-    ax2.grid(True, which="both", ls="-", alpha=0.5)'''
-
-    ###fig.savefig(f"./figures/transient/{name}.png", dpi = 600, bbox_inches = "tight")
-
     x_points = np.array(x_axis)
     y_points = np.array(y_axis)
 

@@ -1,8 +1,8 @@
 from assembleYmatrix import get_idx
 
-def stamp_capacitor_transient(Y_temp, sources, n1, n2, C, node_map, deltaT, cap_voltage):
+def stamp_capacitor_transient(Y, sources, n1, n2, C, node_map, deltaT, cap_voltage):
     """
-    Stamps a capacitor into the admittance matrix Y using the trapezoidal approximation for Geq = 2C/(deltaT)
+    Stamps a capacitor into the admittance matrix Y using the Back Euler approximation
     Y: NxN sparse lilmatrix (complex)
     n1, n2: node numbers
     C: capacitance (Farads)
@@ -10,23 +10,24 @@ def stamp_capacitor_transient(Y_temp, sources, n1, n2, C, node_map, deltaT, cap_
     node_map: dict mapping node numbers to matrix indices
     """
 
-    #### Stamp g into Y matrix ####
-    g = C/deltaT # inverse of R = deltaT/2C         ### Note - change to Trapezoidal - currently Backwards Euler
+    # Capacitor's Geq (equivalent admittance) for Backwards Euler; stamps into the "Y" matrix
+    
+    Geq = C/deltaT # inverse of R = deltaT/2C
     i, j = get_idx(n1, node_map), get_idx(n2, node_map)
     
     if i is not None:
-        Y_temp[i, i] += g
+        Y[i, i] += Geq
         if j is not None:
-            Y_temp[i, j] -= g
-            Y_temp[j, i] -= g
+            Y[i, j] -= Geq
+            Y[j, i] -= g
     if j is not None:
-        Y_temp[j, j] += g
+        Y[j, j] += Geq
 
 
-    ####  Backwards Euler for the current source
-    I_value = C*cap_voltage/deltaT
+    # Capacitor's Ieq (equivalent current source) for Backwards Euler; stamps into the "sources" matrix
+    Ieq = C*cap_voltage/deltaT
 
     i, j = get_idx(n1, node_map), get_idx(n2, node_map)
-    if i is not None: sources[i] -= I_value
-    if j is not None: sources[j] += I_value
+    if i is not None: sources[i] -= Ieq
+    if j is not None: sources[j] += Ieq
 
