@@ -37,6 +37,8 @@ def stamp_capacitor(Y, n1, n2, C, w, node_map):
     """
     g = 1j * w * C
     i, j = get_idx(n1, node_map), get_idx(n2, node_map)
+
+    print(f"In Stamp Capacitor for DC-OP: n1_index is {n1} n2_index is {n2} ")
     
     if i is not None:
         Y[i, i] += g

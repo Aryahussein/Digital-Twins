@@ -4,7 +4,8 @@ from solver import solve_sparse, solve_LU, solve_adjoint, get_node_and_branch_cu
 from postprocessing import map_voltages
 from assembleYmatrix import generate_stamps
 import numpy as np
-from tools import run_bode_plot, print_solution, get_all_sensitivities, plot_sensitivity_sweep
+from tools import run_bode_plot, print_solution, get_all_sensitivities, plot_sensitivity_sweep, plot_transient
+from transientsolver import stamp_capacitor_transient
 
 def build_matrix(componenents, w=0):
     node_map, total_dim = build_node_index(components)
@@ -37,12 +38,17 @@ def do_sensitivity_analysis(lu, VI, output_node, node_map, total_dim, w=0):
     # print(std_dev)
     return sensitivities, std_dev
 
+
+
+
+
+
 if __name__ == "__main__":
     test_directory = "testfiles/"
-    netlist = test_directory + "/ac_lowpass.txt"
+    netlist = test_directory + "/rc.txt"
 
-    w = 2*np.pi * 60
-    # w = 0
+    ############ w = 2*np.pi * 60
+    w = 0
 
     # get components
     components = parse_netlist(netlist)
@@ -55,10 +61,110 @@ if __name__ == "__main__":
     # solve! get LU, node voltages and branch currents of original circuit
     lu = solve_LU(Y)
     VI = get_node_and_branch_currents(lu, sources)
+    ###print_solution(VI, node_map, w=w)
+
+
+
+
+    ############ Transient solving ############
+
+    # transient-time variables
+    num_steps = 100000
+    transient_timestep = 1/num_steps
+    transient_time = 0
+    store_voltage = np.zeros(1000000)
+    store_current = np.zeros(1000000)
+    store_time = np.zeros(1000000)
+
+    ########### use a fake solve where the current is 0A and voltage is 0A to mimic an initial condition where Vsource=0V
+    VI = np.zeros(total_dim)
+    VI[0] = 10
+    VI[1] = 1
+    #print(VI)
+    print("/n/n/n")
     print_solution(VI, node_map, w=w)
 
+    # DC-solved Y is permanent, but we add the Thevenin equivalent for Trapezoidal Approximation to it 
+        # Thevenin equivalent is an R=timestep/C in series with a Vsource=Vnode
+    Y_temp = Y.copy()
+
+
+
+    sources_temp = sources.copy()
+
+    
+    store_time[1] = transient_timestep
+    for tran_step_count in range(1, num_steps):
+        ###print(f"\n\n\n tran_step_count = {tran_step_count}")
+        store_time[tran_step_count] = transient_timestep + store_time[tran_step_count-1]
+        Y_temp = Y.copy()
+        sources_temp = sources.copy()
+
+        for name, comp in components.items():
+            val = comp["value"]
+
+            n1 = comp.get("n1", 0)
+            n2 = comp.get("n2", 0)
+
+            if name.startswith("C"):
+                
+                # Find the voltage from the previous timestep solved
+                if n1:
+                    cap_voltage_n1 = VI[n1-1]
+                else:
+                    cap_voltage_n1 = 0
+
+                if n2:
+                    cap_voltage_n2 = VI[n2-1]
+                else:
+                    cap_voltage_n2 = 0
+
+                cap_voltage = cap_voltage_n2 - cap_voltage_n1       #### Note - might be the wrong way around
+
+                ###print(f"cap_voltage = {cap_voltage} where \n       n1_index is {n1} and cap_voltage_n1= {cap_voltage_n1}  \n       n2_index is {n2} and cap_voltage_n2= {cap_voltage_n2}")
+
+                # Stamp capacitor admittance and add current for Back Euler approximation
+                stamp_capacitor_transient(Y_temp, sources_temp, n1, n2, val, node_map, transient_timestep, cap_voltage)
+
+        ###print(f"Y = {Y}")
+        ###print(f"sources_temp = {sources_temp}")
+
+        lu = solve_LU(Y_temp)
+        VI = get_node_and_branch_currents(lu, sources_temp)
+
+        ###print_solution(VI, node_map, w=w)
+
+        store_voltage[tran_step_count] = VI[1]
+        store_current[tran_step_count] = VI[2]
+
+
+    
+    
+    
+    '''
+    lu = solve_LU(Y_temp)
+    VI_temp = get_node_and_branch_currents(lu, sources_temp)
+    print_solution(VI_temp, node_map, w=w)'''
+    
+    for i in range(0, num_steps):
+        if i % 1000 == 0:
+            print(f"Time = {store_time[i]:.7f}     node2 voltage = {store_voltage[i]:.6f}     current = {store_current[i]:.6f}")
+
+    
+
+
+    plot_transient(store_time, store_voltage, points=num_steps, name="transient_RC")
+
+
+
+    
+
+
+
+
+
     # select output node for adjoint input
-    output_node_for_sensitivity = 2
+    '''output_node_for_sensitivity = 2
     sensitivities, std_dev = do_sensitivity_analysis(lu, VI, output_node_for_sensitivity, node_map, total_dim, w=w)
     print("Sensitivities of components:")
     for name, sens in sensitivities.items():
@@ -74,12 +180,4 @@ if __name__ == "__main__":
     plot_sensitivity_sweep(components, output_node_for_sensitivity, "C1", start_f=10, end_f=1000, name="lowpass_C1_sensitivity")
 
     
-
-
-
-
-
-
-
-
-
+'''
