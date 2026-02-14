@@ -1,13 +1,4 @@
-
-
-
-# Note, this is copied from "assembleYmatrix.py"
-# there is definitely a better way to organize the files so that this function is not defined in two places
-def get_idx(node, node_map):
-    """Returns the matrix index for a node/name, or None if it is Ground (0)."""
-    if node == 0 or node is None:
-        return None
-    return node_map.get(node)
+from assembleYmatrix import get_idx
 
 def stamp_capacitor_transient(Y_temp, sources, n1, n2, C, node_map, deltaT, cap_voltage):
     """
