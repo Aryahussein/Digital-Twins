@@ -19,7 +19,7 @@ def stamp_capacitor_transient(Y, sources, n1, n2, C, node_map, deltaT, cap_volta
         Y[i, i] += Geq
         if j is not None:
             Y[i, j] -= Geq
-            Y[j, i] -= g
+            Y[j, i] -= Geq
     if j is not None:
         Y[j, j] += Geq
 
