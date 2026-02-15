@@ -58,8 +58,6 @@ if __name__ == "__main__":
     #-----------------------------------------------------------------------------------
     # solve circuit
     #-----------------------------------------------------------------------------------
-    lu = np.empty((total_dim, total_dim))
-    VI = np.empty(total_dim)
     if nonlinear:
         V_guess = np.zeros(total_dim)
         max_iter = 100

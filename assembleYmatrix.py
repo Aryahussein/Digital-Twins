@@ -168,6 +168,7 @@ def stamp_diode(Y, sources, n1, n2, Is, p_V_guess, V_guess, node_map):
     exp_term = np.exp(n_vd_k / Vt)
     id_k = Is * (exp_term - 1)
 
+    # gd = dI/dV = linear conductance
     gd = (Is / Vt) * exp_term
     
     # linearized companion model
@@ -198,6 +199,9 @@ def update_nonlinear_stamps(Y_ori, sources_ori, components, node_map, prev_V_gue
     for name, comp in components.items():
         if name.startswith("D"):
             stamp_diode(Y, sources, comp['n1'], comp['n2'], comp.get('value', 1e-12), prev_V_guess, V_guess, node_map)
+
+        # if name.startswith("M")
+        #     stamp_mosfet()
 
     return Y.tocsc(), sources
 
