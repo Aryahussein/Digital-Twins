@@ -69,20 +69,9 @@ if __name__ == "__main__":
         lu, VI = solve_linear_circuit(Y, sources)
 
     print_solution(VI, node_map, w=w)
-
-<<<<<<< HEAD
-    # select output node for adjoint input
-    output_node_for_sensitivity = 2
-    sensitivities, std_dev = do_sensitivity_analysis(lu, VI, output_node_for_sensitivity, node_map, total_dim, w=w)
-    print("Sensitivities of components:")
-    for name, sens in sensitivities.items():
-        print(f"{name}: {sens:.4f} V/unit")
-    print(f"output voltage V = {VI[node_map[output_node_for_sensitivity]]} $\pm$ {std_dev} V")
-=======
     #-----------------------------------------------------------------------------------
     # get sensitivities
     #-----------------------------------------------------------------------------------
->>>>>>> non_linear_solver
 
     # # select output node for adjoint input
     # output_node_for_sensitivity = 3
@@ -97,15 +86,9 @@ if __name__ == "__main__":
     # run_bode_plot(test_directory + "ac_lowpass.txt", output_node=2, start_freq=10, stop_freq=100000, points=200, name = "lowpass")
     # run_bode_plot(test_directory + "ac_resonance.txt", output_node=3, start_freq=10, stop_freq=100000, points=200, name = "resonance")
 
-<<<<<<< HEAD
-    # Example ac sensitivity
-    # print("do sweep")
-    plot_sensitivity_sweep(components, output_node_for_sensitivity, "C1", start_f=10, end_f=1000, name="lowpass_C1_sensitivity")
-=======
     # # Example ac sensitivity
     # print("do sweep")
     # plot_sensitivity_sweep(components, output_node_for_sensitivity, "R1", start_f=10, end_f=1000, name="sensitiviy")
->>>>>>> non_linear_solver
 
     
 
