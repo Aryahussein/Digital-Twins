@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.sparse import lil_matrix
+from constants import *
 
 def get_idx(node, node_map):
     """Returns the matrix index for a node/name, or None if it is Ground (0)."""
@@ -132,7 +133,79 @@ def stamp_vccs(Y, n1, n2, n3, n4, value, node_map):
         if x is not None: Y[k, x] -= value
         if y is not None: Y[k, y] += value
 
-def generate_stamps(components, node_map, total_dim, w=0):
+
+def pnjlim(v_new, v_old, critical_v):
+    """
+    Standard SPICE limiting algorithm for PN junctions.
+    Prevents V_guess from jumping too far in one iteration.
+    """
+    if v_new > critical_v and abs(v_new - v_old) > (2 * Vt):
+        if v_old > critical_v:
+            # If we were already above critical, limit the rate of change
+            v_limit = v_old + 2 * Vt * np.log(v_new / v_old)
+        else:
+            # If we are crossing the threshold, land exactly at critical_v
+            v_limit = critical_v
+        return v_limit
+    return v_new
+
+def stamp_diode(Y, sources, n1, n2, Is, p_V_guess, V_guess, node_map):
+    idx1, idx2 = get_idx(n1, node_map), get_idx(n2, node_map)
+    
+    # Calculate current Vd from the previous iteration's guess
+    v1 = V_guess[idx1] if idx1 is not None else 0
+    v2 = V_guess[idx2] if idx2 is not None else 0
+    vd_k = v1 - v2
+    
+    p_v1 = p_V_guess[idx1] if idx1 is not None else 0
+    p_v2 = p_V_guess[idx2] if idx2 is not None else 0
+    p_vd_k = p_v1 - p_v2
+
+    # limit the amount v can jump at a time & prevent overflows
+    n_vd_k = pnjlim(vd_k, p_vd_k, 1)
+
+    # 1. Calculate linearization components
+    exp_term = np.exp(n_vd_k / Vt)
+    id_k = Is * (exp_term - 1)
+
+    # gd = dI/dV = linear conductance
+    gd = (Is / Vt) * exp_term
+    
+    # linearized companion model
+    ieq = id_k - gd * n_vd_k
+    
+    # 2. Stamp gd into Y (like a resistor)
+    if idx1 is not None:
+        Y[idx1, idx1] += gd
+        if idx2 is not None:
+            Y[idx1, idx2] -= gd
+            Y[idx2, idx1] -= gd
+    if idx2 is not None:
+        Y[idx2, idx2] += gd
+        
+    # 3. Stamp Ieq into RHS vector
+    if idx1 is not None: sources[idx1] -= ieq
+    if idx2 is not None: sources[idx2] += ieq
+
+
+def update_nonlinear_stamps(Y_ori, sources_ori, components, node_map, prev_V_guess, V_guess):
+    """
+    Maintains the base linear circuit and injects updated non-linear models.
+    """
+    # Create fresh copies of the linear base for this iteration
+    Y = Y_ori.copy().tolil() 
+    sources = sources_ori.copy()
+    
+    for name, comp in components.items():
+        if name.startswith("D"):
+            stamp_diode(Y, sources, comp['n1'], comp['n2'], comp.get('value', 1e-12), prev_V_guess, V_guess, node_map)
+
+        # if name.startswith("M")
+        #     stamp_mosfet()
+
+    return Y.tocsc(), sources
+
+def generate_stamps(components, node_map, total_dim, w=0.0):
     """
     w: Angular frequency (rad/s). Set to 0 for DC.
     """
@@ -167,5 +240,13 @@ def generate_stamps(components, node_map, total_dim, w=0):
 
         elif name.startswith("L"):
             stamp_inductor(Y, n1, n2, val, w, name, node_map)
+
+        # only stamp linear components here!!
+        # stamp only the nonlinear ones using the update stamps
+        # elif name.startswith("D"):
+        #     if V_guess == None: 
+        #         raise ValueError("Initial V_guess was not defined correctly!")
+        #     prev_V_guess = V_guess.copy()
+        #     stamp_diode(Y, sources, n1, n2, comp.get("Is"), prev_V_guess, V_guess, node_map)
 
     return Y.tocsc(), sources
