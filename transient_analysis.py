@@ -17,7 +17,7 @@ def transient_analysis_loop(components, t_stop, dt, method):
         num_nodes   : number of non-ground nodes
         stamping functions must be provided
     """
-    node_map, num_nodes = build_node_index(components)
+    node_map, num_nodes = build_node_index(components, "tran")
     num_steps = int(t_stop / dt)
 
     # Storage for results
@@ -26,6 +26,7 @@ def transient_analysis_loop(components, t_stop, dt, method):
 
     # Initial condition (all zeros unless otherwise specified)
     v_prev = np.zeros(num_nodes)
+    sources_prev = np.zeros(num_nodes)
 
     for step in range(num_steps):
 
@@ -34,7 +35,7 @@ def transient_analysis_loop(components, t_stop, dt, method):
         # Replace time-dependent sources with DC equivalents
         comp_t = evaluate_all_time_sources(components, t)
 
-        Y, sources = generate_stamps_transient(comp_t, node_map, num_nodes, v_prev, dt, method)
+        Y, sources = generate_stamps_transient(comp_t, node_map, num_nodes, v_prev, sources_prev, dt, method, step)
 
         # Solve system
         v = solve_sparse(Y, sources)
@@ -44,14 +45,20 @@ def transient_analysis_loop(components, t_stop, dt, method):
 
         # Update state for next timestep
         v_prev = v.copy()
+        sources_prev = sources.copy()
 
     return time, results
 
 if __name__ == '__main__':
-    file = r"testfiles/pulse_rc_circuit.txt"
+    file = r"testfiles/pulse_rlc_circuit.txt"
     components = parse_netlist(file)
-    dt = 0.1e-6
+    dt = 0.1e-7
     t_stop = 40e-6
     time, results = transient_analysis_loop(components, t_stop, dt, "BE")
     plt.plot(time, results[:, 1])
+
+    print(results)
+
     plt.show()
+
+    print()

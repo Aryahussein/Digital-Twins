@@ -175,6 +175,47 @@ def stamp_capacitor_backward_euler(G, b, comp, dt, v_prev, node_map):
     if i2 is not None:
         b[i2] -= I_eq
 
+
+def stamp_inductor_backward_euler(G, b, comp, dt, v_prev, sources_prev, node_map, name):
+    """
+    Stamp a capacitor into the MNA matrix using Backward Euler.
+
+    Parameters:
+        G       : Admittance matrix (numpy array)
+        b       : RHS vector (numpy array)
+        comp    : Component dictionary entry for inductor
+        dt      : Time step
+        v_prev  : Previous timestep node voltage vector
+    """
+
+    n1 = comp["n1"]
+    n2 = comp["n2"]
+    L = comp["value"]
+
+    idx = node_map[name]
+    i, j = get_idx(n1, node_map), get_idx(n2, node_map)
+        
+    # 1. KCL Connections (Same as Voltage Source)
+    if i is not None:
+        G[i, idx] += 1
+        G[idx, i] += 1
+    if j is not None:
+        G[j, idx] -= 1
+        G[idx, j] -= 1
+
+    # 2. Impedance Term (subtracted from diagonal)
+    R_eq = L / dt
+    G[idx, idx] -= R_eq
+
+    # Equivalent current (for RHS)
+    I_eq = v_prev[idx]
+
+    # Thevenin equivalent (L/dt)*i(t)
+    V_eq = L*v_prev[idx] / dt
+    b[idx] -= V_eq
+   
+
+
 def generate_stamps(components, node_map, total_dim, w=0):
     """
     w: Angular frequency (rad/s). Set to 0 for DC.
@@ -213,7 +254,7 @@ def generate_stamps(components, node_map, total_dim, w=0):
 
     return Y.tocsc(), sources
 
-def generate_stamps_transient(components, node_map, total_dim, v_hist, dt, method):
+def generate_stamps_transient(components, node_map, total_dim, v_hist, sources_hist, dt, method, step):
     """
         w: Angular frequency (rad/s). Set to 0 for DC.
         """
@@ -237,6 +278,15 @@ def generate_stamps_transient(components, node_map, total_dim, v_hist, dt, metho
             if method == "BE":
                 stamp_capacitor_backward_euler(Y, sources, comp, dt, v_hist, node_map)
 
+        
+
+        elif name.startswith("L"):
+                 # its necessary to add dimensions to the Y matrix 
+                 # (could also be done in the DC OP step, and then that Y matrix is passed into the transient solves)
+            #stamp_inductor(Y, n1, n2, val, 0, name, node_map)
+            if method == "BE":
+                stamp_inductor_backward_euler(Y, sources, comp, dt, v_hist, sources_hist, node_map, name)
+
         elif name.startswith("I"):
             stamp_current_source(sources, n1, n2, val, node_map)
 
@@ -246,5 +296,6 @@ def generate_stamps_transient(components, node_map, total_dim, v_hist, dt, metho
         elif name.startswith("V"):
             # We pass 'name' (e.g., 'V1') to look up its MNA row
             stamp_independent_voltage(Y, sources, n1, n2, val, name, node_map)
+
 
     return Y.tocsc(), sources
