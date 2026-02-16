@@ -1,0 +1,17 @@
+* Transient Source Test Netlist
+
+* DC Voltage Source
+V1 1 0 5
+
+* Sine Voltage Source
+V2 2 0 SIN(0 10 1k)
+
+* Pulse Voltage Source
+V3 3 0 PULSE(0 5 1u 1u 1u 10u 20u)
+
+* Resistors
+R1 1 2 1k
+R2 2 3 2k
+
+* Capacitor
+C1 3 0 10u

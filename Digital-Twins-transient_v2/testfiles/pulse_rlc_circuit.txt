@@ -1,0 +1,17 @@
+* RC Circuit with Pulse Source
+
+* Pulse source:
+* PULSE(V1 V2 TD TR TF PW PER)
+V1 1 0 PULSE(0 5 1u 0.0001u 1u 10u 20u)
+
+* Series resistor
+R1 1 2 1k
+
+* Series capacitor+inductor
+C1 2 3 1n
+L1 3 0 10m
+
+
+* Parallel capacitor+inductor
+*C1 2 0 1n
+*L1 3 0 1

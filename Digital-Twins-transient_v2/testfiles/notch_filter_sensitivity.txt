@@ -1,0 +1,13 @@
+* High Sensitivity Twin-T Notch Filter (60Hz)
+* Sensitivity is highest at w = 1/(R*C)
+V1 1 0 10
+R1 1 2 26.5k
+R2 2 3 26.5k
+C5 2 0 200n
+
+C3 1 4 100n
+C4 4 3 100n
+R6 4 0 13.25k
+
+* Rload 3 0 1M
+* Output at Node 3
