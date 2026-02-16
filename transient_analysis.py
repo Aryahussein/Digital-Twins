@@ -4,7 +4,6 @@ from sources import evaluate_all_time_sources
 from solver import solve_sparse
 from node_index import build_node_index
 from txt2dictionary import parse_netlist
-import matplotlib.pyplot as plt
 
 def transient_analysis_loop(components, t_stop, dt, method):
     """
@@ -17,7 +16,7 @@ def transient_analysis_loop(components, t_stop, dt, method):
         num_nodes   : number of non-ground nodes
         stamping functions must be provided
     """
-    node_map, num_nodes = build_node_index(components, "tran")
+    node_map, num_nodes = build_node_index(components)
     num_steps = int(t_stop / dt)
 
     # Storage for results
@@ -50,10 +49,11 @@ def transient_analysis_loop(components, t_stop, dt, method):
     return time, results
 
 if __name__ == '__main__':
-    file = r"testfiles/pulse_rlc_circuit.txt"
+    #file = r"testfiles/pulse_rlc_circuit.txt"
+    file = r"testfiles/buck_circuit.txt"
     components = parse_netlist(file)
-    dt = 0.1e-7
-    t_stop = 40e-6
+    dt = 0.1e-6
+    t_stop = 10e-3
     time, results = transient_analysis_loop(components, t_stop, dt, "BE")
     plt.plot(time, results[:, 1])
 

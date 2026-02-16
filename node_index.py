@@ -1,8 +1,6 @@
-def build_node_index(components, solve_type):
+def build_node_index(components):
     """
     Builds a single mapping for all unknowns (voltages and currents).
-
-    solve_type should be set to "tran" for transient solving & can be set to anything else for AC or DC-op solving
     
     Returns:
         var_map: dict {name_or_node: matrix_index}

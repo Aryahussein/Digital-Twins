@@ -226,12 +226,23 @@ def generate_stamps(components, node_map, total_dim, w=0):
     sources = np.zeros(total_dim, dtype=dtype)
 
     for name, comp in components.items():
+
         # Extract basic nodes (default to 0 if not present)
         n1 = comp.get("n1", 0)
         n2 = comp.get("n2", 0)
         n3 = comp.get("n3", 0)
         n4 = comp.get("n4", 0)
-        val = comp["value"]
+
+        # Non-time-varying components
+        if "source" not in comp:
+            val = comp["value"]
+
+        # Time-varying components
+        else:
+            if comp["source"]["type"] == "PULSE":
+                val = comp["source"]["V1"]
+            elif comp["source"]["type"] == "SIN" or comp["source"]["type"] == "COS":
+                val = comp["source"]["VOFF"]
 
         if name.startswith("R"):
             stamp_resistor(Y, n1, n2, val, node_map)

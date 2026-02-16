@@ -5,8 +5,16 @@ from postprocessing import map_voltages
 from assembleYmatrix import generate_stamps
 import numpy as np
 from tools import run_bode_plot, print_solution, get_all_sensitivities, plot_sensitivity_sweep
+from transient_analysis import transient_analysis_loop
 
-def build_matrix(componenents, w=0):
+
+# Note: necessary for plotting the transient; there is probably different imports that could be done
+import matplotlib
+matplotlib.use('TkAgg')  # or 'Qt5Agg'
+import matplotlib.pyplot as plt
+
+
+def build_matrix(components, solver_type, w=0):
     node_map, total_dim = build_node_index(components)
 
     # Build Y matrix and I vector from components
@@ -39,31 +47,68 @@ def do_sensitivity_analysis(lu, VI, output_node, node_map, total_dim, w=0):
 
 if __name__ == "__main__":
     test_directory = "testfiles/"
-    netlist = test_directory + "/ac_lowpass.txt"
+    netlist = test_directory + "/buck_circuit.txt"
 
-    w = 2*np.pi * 60
-    # w = 0
+    print("\n")
 
-    # get components
-    components = parse_netlist(netlist)
-    print(components)
+    # w = 2*np.pi * 60
+    w = 0
 
-    # get matrix, sources, and mapping of components to matrix indeces
-    Y, sources, node_map, total_dim = build_matrix(components, w=w)
-    print(node_map)
+    # Read SPICE .txt file to create component list & solver list
+    components, sim_analyses = parse_netlist(netlist)
 
-    # solve! get LU, node voltages and branch currents of original circuit
-    lu = solve_LU(Y)
-    VI = get_node_and_branch_currents(lu, sources)
-    print_solution(VI, node_map, w=w)
+    
 
-    # select output node for adjoint input
+    # Execute the solver for each analysis to be performed (eg. DC-op, AC, transient)
+    for solver in sim_analyses:
+    
+        # DC Operating Point
+        if solver == ".op":
+            # get matrix, sources, and mapping of components to matrix indeces
+            Y, sources, node_map, total_dim = build_matrix(components, solver, w=w)
+            print(node_map)
+
+            # solve! get LU, node voltages and branch currents of original circuit
+            lu = solve_LU(Y)
+            VI = get_node_and_branch_currents(lu, sources)
+            print_solution(VI, node_map, w=w)
+
+            print(f"sim_analyses = {sim_analyses}")
+            continue                # Note: add DC operating point analysis here
+
+        # AC Analysis
+        elif solver == ".ac":
+            # Note: parse_netlist has .txt file pre-processing that reads in start/stop frequency from .ac SPICE directives
+                # See the example for transient analysis below
+            continue                # Note: add AC analysis here
+
+        # Transient Analysis
+        elif solver == ".tran":
+            dt = sim_analyses[solver]["max_timestep"]       #Note: I think there is a more readable way to access this
+            t_stop = sim_analyses[solver]["stop_time"]      #Note: I think there is a more readable way to access this
+            time, results = transient_analysis_loop(components, t_stop, dt, "BE")
+            plt.plot(time, results[:, 1])
+            print(results)
+            plt.show()
+            continue                # Note: add transient analysis here
+    
+
+
+
+
+
+
+
+
+    '''
+    # # Select output node for adjoint input
     output_node_for_sensitivity = 2
     sensitivities, std_dev = do_sensitivity_analysis(lu, VI, output_node_for_sensitivity, node_map, total_dim, w=w)
     print("Sensitivities of components:")
     for name, sens in sensitivities.items():
         print(f"{name}: {sens:.4f} V/unit")
     print(f"output voltage V = {VI[node_map[output_node_for_sensitivity]]} $\pm$ {std_dev} V")
+    '''
 
     # # Example Bode Plot
     # run_bode_plot(test_directory + "ac_lowpass.txt", output_node=2, start_freq=10, stop_freq=100000, points=200, name = "lowpass")
@@ -71,12 +116,7 @@ if __name__ == "__main__":
 
     # Example ac sensitivity
     # print("do sweep")
-    plot_sensitivity_sweep(components, output_node_for_sensitivity, "C1", start_f=10, end_f=1000, name="lowpass_C1_sensitivity")
-
-    
-
-
-
+    # plot_sensitivity_sweep(components, output_node_for_sensitivity, "C1", start_f=10, end_f=1000, name="lowpass_C1_sensitivity")
 
 
 
