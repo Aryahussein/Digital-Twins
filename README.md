@@ -15,6 +15,7 @@
 -> depth first search to determine ideal node indices?
 - Allow nodes to have any name (not just 1, 2, etc.) to allow importing spice files directly from LTSpice (which uses N001, N002, etc. naming)
 
+SPICE folder has merged codes with GUI and plotting with updated parser 
 
 
 
