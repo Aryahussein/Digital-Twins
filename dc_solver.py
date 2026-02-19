@@ -1,22 +1,15 @@
 import sympy as sp
 
-# ==========================================================
-# DC Solver Entry Point
-# ==========================================================
+
 def run_dc(NETLIST_FILE):
 
-    # ==========================================================
-    # Helper functions
-    # ==========================================================
     def strip_comments(line):
-        """Remove SPICE comments (* or ;)"""
         for c in ['*', ';']:
             if c in line:
                 line = line.split(c, 1)[0]
         return line.strip()
 
     def parse_value(val):
-        """Parse SPICE numeric values with suffixes"""
         val = val.lower()
         scale = {
             't': 1e12,
@@ -34,22 +27,18 @@ def run_dc(NETLIST_FILE):
                 return float(val[:-len(s)]) * scale[s]
         return float(val)
 
-    # ==========================================================
-    # Netlist containers
-    # ==========================================================
     resistors = []
-    currents = []
     voltages = []
-    vccs = []
+    currents = []
+    opamps = []
     nodes = set()
     found_op = False
 
-    # ==========================================================
-    # Parse netlist
-    # ==========================================================
-    with open(NETLIST_FILE, "r") as f:
-        for raw_line in f:
-            line = strip_comments(raw_line)
+    # ---------------- Parse ----------------
+    with open(NETLIST_FILE) as f:
+        for raw in f:
+
+            line = strip_comments(raw)
             if not line:
                 continue
 
@@ -64,54 +53,40 @@ def run_dc(NETLIST_FILE):
                 resistors.append((n1, n2, parse_value(val)))
                 nodes.update([n1, n2])
 
-            elif name.startswith('i'):
-                _, n_plus, n_minus, val = tokens
-                currents.append((n_plus, n_minus, parse_value(val)))
-                nodes.update([n_plus, n_minus])
-
             elif name.startswith('v'):
-                _, n_plus, n_minus, val = tokens
-                voltages.append((tokens[0], n_plus, n_minus, parse_value(val)))
-                nodes.update([n_plus, n_minus])
+                _, n1, n2, val = tokens
+                voltages.append((tokens[0], n1, n2, parse_value(val)))
+                nodes.update([n1, n2])
 
-            elif name.startswith('g'):
-                _, n_plus, n_minus, ncp, ncm, val = tokens
-                vccs.append((n_plus, n_minus, ncp, ncm, parse_value(val)))
-                nodes.update([n_plus, n_minus, ncp, ncm])
+            elif name.startswith('i'):
+                _, n1, n2, val = tokens
+                currents.append((n1, n2, parse_value(val)))
+                nodes.update([n1, n2])
+
+            elif name.startswith('o'):
+                # Oname n+ n- nout gain
+                _, nplus, nminus, nout, gain = tokens
+                opamps.append((nplus, nminus, nout, parse_value(gain)))
+                nodes.update([nplus, nminus, nout])
 
     if not found_op:
-        raise RuntimeError("DC solver called but no .op directive found")
+        raise RuntimeError("No .op directive found")
 
-    # ==========================================================
-    # Node indexing
-    # ==========================================================
     nodes.discard("0")
     nodes = sorted(nodes)
 
     N = len(nodes)
-    M = len(voltages)
+    Mv = len(voltages)
+    Mo = len(opamps)
 
     node_idx = {n: i for i, n in enumerate(nodes)}
 
-    # ==========================================================
-    # Symbolic variables
-    # ==========================================================
-    Vn = sp.Matrix([sp.symbols(f"V{n}") for n in nodes])
-    Iv = sp.Matrix([sp.symbols(f"I_{v[0]}") for v in voltages])
+    size = N + Mv + Mo
 
-    # ==========================================================
-    # MNA matrices
-    # ==========================================================
-    G = sp.zeros(N, N)
-    B = sp.zeros(N, M)
-    C = sp.zeros(M, N)
-    D = sp.zeros(M, M)
-    I = sp.zeros(N, 1)
-    E = sp.zeros(M, 1)
+    G = sp.zeros(size, size)
+    Z = sp.zeros(size, 1)
 
-    # ==========================================================
-    # Stamp resistors
-    # ==========================================================
+    # ---------------- Stamp Resistors ----------------
     for n1, n2, R in resistors:
         g = 1 / R
         if n1 != "0":
@@ -123,74 +98,54 @@ def run_dc(NETLIST_FILE):
             G[i, j] -= g
             G[j, i] -= g
 
-    # ==========================================================
-    # Stamp VCCS
-    # ==========================================================
-    for n_plus, n_minus, ncp, ncm, gm in vccs:
+    # ---------------- Stamp Current Sources ----------------
+    for n1, n2, val in currents:
+        if n1 != "0":
+            Z[node_idx[n1]] -= val
+        if n2 != "0":
+            Z[node_idx[n2]] += val
 
-        def idx(n):
-            return node_idx[n] if n != "0" else None
+    # ---------------- Stamp Voltage Sources ----------------
+    for k, (name, n1, n2, val) in enumerate(voltages):
+        row = N + k
 
-        p, m = idx(n_plus), idx(n_minus)
-        cp, cm = idx(ncp), idx(ncm)
+        if n1 != "0":
+            G[row, node_idx[n1]] = 1
+            G[node_idx[n1], row] = 1
 
-        if p is not None and cp is not None:
-            G[p, cp] += gm
-        if p is not None and cm is not None:
-            G[p, cm] -= gm
-        if m is not None and cp is not None:
-            G[m, cp] -= gm
-        if m is not None and cm is not None:
-            G[m, cm] += gm
+        if n2 != "0":
+            G[row, node_idx[n2]] = -1
+            G[node_idx[n2], row] = -1
 
-    # ==========================================================
-    # Stamp current sources
-    # ==========================================================
-    for n_plus, n_minus, val in currents:
-        if n_plus != "0":
-            I[node_idx[n_plus]] -= val
-        if n_minus != "0":
-            I[node_idx[n_minus]] += val
+        Z[row] = val
 
-    # ==========================================================
-    # Stamp voltage sources
-    # ==========================================================
-    for k, (name, n_plus, n_minus, val) in enumerate(voltages):
-        if n_plus != "0":
-            B[node_idx[n_plus], k] = 1
-            C[k, node_idx[n_plus]] = 1
-        if n_minus != "0":
-            B[node_idx[n_minus], k] = -1
-            C[k, node_idx[n_minus]] = -1
-        E[k] = val
+    # ---------------- Stamp Ideal Op Amps ----------------
+    for k, (nplus, nminus, nout, gain) in enumerate(opamps):
 
-    # ==========================================================
-    # Assemble & solve
-    # ==========================================================
-    if M > 0:
-        A = G.row_join(B)
-        A = A.col_join(C.row_join(D))
-        Z = I.col_join(E)
-        X = Vn.col_join(Iv)
-    else:
-        A = G
-        Z = I
-        X = Vn
+        row = N + Mv + k
 
-    X_sol = A.LUsolve(Z)
+        # Output equation:
+        # Vout - A(V+ - V-) = 0
 
-    # ==========================================================
-    # Output
-    # ==========================================================
+        if nout != "0":
+            G[row, node_idx[nout]] = 1
+            G[node_idx[nout], row] = 1
+
+        if nplus != "0":
+            G[row, node_idx[nplus]] -= gain
+
+        if nminus != "0":
+            G[row, node_idx[nminus]] += gain
+
+    # ---------------- Solve ----------------
+    X = G.LUsolve(Z)
+
     print("\n========== DC OPERATING POINT ==========")
-    for n, v in zip(nodes, X_sol[:N]):
-        sp.pprint(sp.Eq(sp.symbols(f"V{n}"), v))
+    for n in nodes:
+        idx = node_idx[n]
+        print(f"V{n} = {float(X[idx])}")
 
-    if M > 0:
+    if Mv > 0:
         print("\n========== VOLTAGE SOURCE CURRENTS ==========")
-        for (name, _, _, _), iv in zip(voltages, X_sol[N:]):
-            sp.pprint(sp.Eq(sp.symbols(f"I_{name}"), iv))
-
-
-# Explicit export
-__all__ = ["run_dc"]
+        for k, (name, _, _, _) in enumerate(voltages):
+            print(f"I_{name} = {float(X[N+k])}")

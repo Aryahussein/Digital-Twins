@@ -11,3 +11,5 @@ Progress -
 5. 2/1 - Added VCCS source
 6. 2/4 - Added 2 new files - dc_sovler.py and ac_solver.py which you can choose like you do on the spice netlists: .op - for dc and .ac for ac analysis.
 7. 2/5 - made a main.py which reads netlist -> and picks the solver based on the netlist. Plots bode plots using matplotlib for ac solver.
+8. 2/16 - Added ideal op amp - still linear MNA - to check with dc and ac analysis - works - tested with a simple non-inverting amp configuration.
+9. 2/18 - Added transient solver - works! - verified using an RC circuit/RLC circuits and even an ideal op amp model.
