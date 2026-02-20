@@ -25,8 +25,8 @@ def parse_value(value_str):
     number_part = float(match.group(1))
     suffix_part = match.group(2)
 
-    if suffix_part.startswith("MEG"):
-        return number_part * multipliers["MEG"]
+    # if suffix_part.startswith("MEG"):
+    #     return number_part * multipliers["MEG"]
     
     for suffix, mult in multipliers.items():
         if suffix_part.startswith(suffix):

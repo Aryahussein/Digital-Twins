@@ -28,8 +28,7 @@ def build_node_index(components):
             node_map[name] = current_idx
             current_idx += 1
             
-    total_dim = current_idx
-    return node_map, total_dim
+    return node_map
 
 def invert_node_index(node_index):
     return {i: node for node, i in node_index.items()}

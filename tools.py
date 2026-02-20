@@ -2,186 +2,123 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # This must come before importing pyplot
 import matplotlib.pyplot as plt
-from txt2dictionary import parse_netlist
-from node_index import build_node_index
-from solver import solve_sparse, solve_LU, get_node_and_branch_currents, solve_adjoint
-from postprocessing import map_voltages
-from assembleYmatrix import generate_stamps
 
-
-def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0):
-    sensitivities = {}
-
-    for name, comp in components.items():
-        # 1. Get Indices and branch voltages
-        n1, n2 = comp.get("n1", 0), comp.get("n2", 0)
-        idx1, idx2 = node_map.get(n1), node_map.get(n2) # get_idx logic
-
-        # Helper to get the voltage difference across a branch
-        # (v1 - v2). If a node is ground, its voltage is 0.
-        VI_branch = (VI[idx1] if idx1 is not None else 0) - \
-                   (VI[idx2] if idx2 is not None else 0)
-        
-        PsiPhi_branch = (PsiPhi[idx1] if idx1 is not None else 0) - \
-                       (PsiPhi[idx2] if idx2 is not None else 0)
-
-        # 2. Apply the sensitivity formula based on component type
-        if name.startswith("R"):
-            # Sensitivity w.r.t Resistance (R):
-            # dY/dR = (1/R^2) * VI_branch * PsiPhi_branch
-            R = comp["value"]
-            sensitivities[name] = (1.0 / (R**2)) * (VI_branch * PsiPhi_branch)
-
-        elif name.startswith("C"):
-            # Sensitivity w.r.t Capacitance (C):
-            # dY/dC = j*w. Sensitivity = - (j*w * VI_branch * PsiPhi_branch)
-            sensitivities[name] = -1j * w * (VI_branch * PsiPhi_branch)
-
-        elif name.startswith("L"):
-            # For Inductors, we use the MNA branch current
-            # Row index for the inductor current is its entry in node_map
-            l_curr_idx = node_map[name]
-            i_L = VI[l_curr_idx]
-            i_L_hat = PsiPhi[l_curr_idx]
-            
-            # dY/dL for an inductor row is -j*w
-            # Sensitivity = - (-j*w * i_L * i_L_hat) = j*w * i_L * i_L_hat
-            sensitivities[name] = 1j * w * (i_L * i_L_hat)
-
-        elif name.startswith("G"):
-            # VCCS: I = gm * (VI_sense_pos - VI_sense_neg)
-            # Sensitive w.r.t transconductance (gm)
-            n3, n4 = comp.get("n3", 0), comp.get("n4", 0)
-            idx3, idx4 = node_map.get(n3), node_map.get(n4)
-            
-            v_sense = (VI[idx3] if idx3 is not None else 0) - \
-                      (VI[idx4] if idx4 is not None else 0)
-            
-            # For VCCS, sensitivity = - (PsiPhi_branch_current * VI_sense)
-            # In adjoint, this is PsiPhi_branch (voltage at the current source nodes)
-            sensitivities[name] = - (PsiPhi_branch * v_sense)
-
-    return sensitivities
-
-def run_bode_plot(netlist_file, output_node, start_freq=10, stop_freq=100000, points=100, name="bodeplot"):
-    """
-    Runs a frequency sweep and plots Magnitude (dB) and Phase.
+def make_bode_plot(frequencies, VI, node_map, output_node, folder="./figures/ac", name="bodeplot"):
+    """Plots standard Magnitude (dB) and Phase (deg) vs Frequency."""
+    # Extract the voltage array for the specific output node across all frequencies
+    print(f"Plotting Bode plot for output node {output_node}...")
+    idx = node_map[output_node]
+    V_out = VI[:, idx] 
     
-    netlist_file: Path to the .txt file
-    output_node: The integer node ID to plot (e.g., 2)
-    start_freq: Start Hz
-    stop_freq: Stop Hz
-    points: Number of steps
-    """
+    mag = np.abs(V_out)
+    mag = np.where(mag == 0, 1e-12, mag) # Prevent log(0) crash
+    mag_db = 20 * np.log10(mag)
+    phase = np.angle(V_out, deg=True)
     
-    # 1. Parse Netlist Once
-    components = parse_netlist(netlist_file)
-    node_index, total_dim = build_node_index(components)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 5), sharex=True)
     
-    # 2. Setup Frequency Range (Logarithmic spacing)
-    frequencies = np.logspace(np.log10(start_freq), np.log10(stop_freq), points)
-    magnitudes_db = []
-    phases_deg = []
-    
-    print(f"Running sweep from {start_freq} Hz to {stop_freq} Hz on {netlist_file}...")
-
-    # 3. Frequency Sweep Loop
-    for f in frequencies:
-        w = 2 * np.pi * f  # Convert Hz to Rad/s
-        
-        # Build Matrix for this specific frequency w
-        Y, I = generate_stamps(components, node_index, total_dim, w=w)
-        
-        # Solve
-        solution = solve_sparse(Y, I)
-        
-        # Map Voltages
-        voltages = map_voltages(solution, node_index)
-        
-        # Extract Data for the specific output node
-        v_out = voltages.get(output_node, 0.0)
-        
-        # Convert to dB and Degrees
-        mag = np.abs(v_out)
-        phase = np.angle(v_out, deg=True)
-        
-        # Avoid log(0) error
-        mag_db = 20 * np.log10(mag) if mag > 1e-12 else -100
-        
-        magnitudes_db.append(mag_db)
-        phases_deg.append(phase)
-
-    # 4. Plotting
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 4), sharex=True)
-    
-    # Magnitude Plot
-    ax1.semilogx(frequencies, magnitudes_db, 'b-', linewidth=2)
+    # --- Magnitude Plot ---
+    ax1.semilogx(frequencies, mag_db, 'b-', linewidth=2)
     ax1.set_ylabel("Magnitude (dB)")
     ax1.set_title(f"Bode Plot: Node {output_node}")
     ax1.grid(True, which="both", ls="-", alpha=0.6)
     
-    # Mark -3dB point (approx) for convenience
-    max_gain = np.max(magnitudes_db)
+    max_gain = np.max(mag_db)
     ax1.axhline(max_gain - 3, color='r', linestyle='--', alpha=0.5, label="-3dB line")
     ax1.legend()
 
-    # Phase Plot
-    ax2.semilogx(frequencies, phases_deg, 'r-', linewidth=2)
+    # --- Phase Plot ---
+    ax2.semilogx(frequencies, phase, 'r-', linewidth=2)
     ax2.set_xlabel("Frequency (Hz)")
     ax2.set_ylabel("Phase (Degrees)")
     ax2.set_yticks(np.arange(-180, 181, 45))  # Nice 45-degree steps
     ax2.grid(True, which="both", ls="-", alpha=0.6)
     
-    # plt.show()
-    fig.savefig(f"./figures/ac/{name}.png", dpi = 600, bbox_inches = "tight" )
+    fig.tight_layout()
+    fig.savefig(f"{folder}/{name}.png", dpi=600)
+    plt.close(fig)
 
-def plot_sensitivity_sweep(components, output_node, target_component, start_f=10, end_f=1000, name="sensitiviy"):
-    node_map, total_dim = build_node_index(components)
-    freqs = np.logspace(np.log10(start_f), np.log10(end_f), 200)
+def plot_ac_sensitivity(frequencies, VI, sensitivities, node_map, output_node, target_component, folder="./figures/ac", name="ac_sensitivity"):
+    """Plots Output Magnitude alongside the Sensitivity Magnitude for a specific component."""
+    print(f"Plotting AC sensitivity for output node {output_node} w.r.t {target_component}...")
+    idx = node_map[output_node]
+    V_out = VI[:, idx]
     
-    v_out_mags = []
-    sens_mags = []
+    mag = np.abs(V_out)
+    mag = np.where(mag == 0, 1e-12, mag)
+    mag_db = 20 * np.log10(mag)
 
-    for f in freqs:
-        w = 2 * np.pi * f
-        Y, sources = generate_stamps(components, node_map, total_dim, w)
-        
-        lu = solve_LU(Y)
-        VI = get_node_and_branch_currents(lu, sources)
-        
-        PsiPhi = solve_adjoint(lu, output_node, node_map, total_dim)
-
-        # 3. Calculate Sensitivity for R1
-        s = get_all_sensitivities(components, VI, PsiPhi, node_map, w)
-        
-        v_out_mags.append(np.abs(VI[node_map[output_node]]))
-        sens_mags.append(np.abs(s[target_component]))
-
-    v_out_mags = np.array(v_out_mags)
-    sens_mags = np.array(sens_mags)
-
-    # Plotting
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 4), sharex=True)
+    # print(sensitivities)
     
-    mag_db = 20 * np.log10(v_out_mags)
-    ax1.semilogx(freqs, mag_db, lw=2)
-    # ax1.set_ylabel("Output Magnitude |Vout| (V)")
-    ax1.set_ylabel("Magnitude (dB)")
-    # ax1.set_title("Twin-T Notch Filter Response")
+    # Extract sensitivity array from the nested dictionary
+    sens_mags = np.abs(sensitivities[output_node][target_component])
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 5), sharex=True)
+    
+    # --- Output Magnitude ---
+    ax1.semilogx(frequencies, mag_db, lw=2)
+    ax1.set_ylabel("Output Mag (dB)")
+    ax1.set_title(f"AC Sensitivity: Node {output_node} w.r.t {target_component}")
     ax1.grid(True, which="both", ls="-", alpha=0.5)
 
-    max_gain = np.max(mag_db)
-    print(f"Max Gain: {max_gain:.4f} dB")
-    ax1.axhline(max_gain - 3, color='r', linestyle='--', alpha=0.5, label="-3dB line")
-    ax1.legend()
-
-    ax2.semilogx(freqs, sens_mags, color='red', lw=2)
-    ax2.set_ylabel(f"Sensitivity |dVout / d{target_component}|")
+    # --- Sensitivity Magnitude ---
+    ax2.semilogx(frequencies, sens_mags, color='red', lw=2)
+    ax2.set_ylabel(f"| dV_{output_node} / d{target_component} |")
     ax2.set_xlabel("Frequency (Hz)")
-    ax2.set_title("Sensitivity vs. Frequency")
     ax2.grid(True, which="both", ls="-", alpha=0.5)
 
-    fig.savefig(f"./figures/ac/{name}.png", dpi = 600, bbox_inches = "tight" )
+    fig.tight_layout()
+    fig.savefig(f"{folder}/{name}.png", dpi=600)
+    plt.close(fig)
+
+def plot_transient(time, VI, node_map, output_node, folder="./figures/tran", name="transient"):
+    """Plots standard Voltage vs Time."""
+    print(f"Plotting transient response for output node {output_node}...")
+    
+    fig, ax = plt.subplots(figsize=(6, 3))
+    
+    for idx, node in enumerate(output_node):
+        idx = node_map[node]
+        V_out = np.real(VI[:, idx]) 
+        ax.plot(time, V_out, linewidth=2, label=f"Node {node}")
+
+    ax.set_ylabel(f"Voltage (V)")
+    ax.set_xlabel("Time (s)")
+    ax.legend()
+    ax.set_title(f"Transient Response: Node {output_node}")
+    ax.grid(True, ls="--", alpha=0.6)
+    
+    fig.tight_layout()
+    fig.savefig(f"{folder}/{name}.png", dpi=600)
+    plt.close(fig)
+
+def plot_transient_sensitivity(time, VI, sensitivities, node_map, output_node, target_component, folder="./figures/tran", name="tran_sensitivity"):
+    """Plots Transient Voltage alongside the Transient Sensitivity for a specific component."""
+    print(f"Plotting transient sensitivity for output node {output_node} w.r.t {target_component}...")
+    output_node = output_node[0] 
+    idx = node_map[output_node]
+    V_out = np.real(VI[:, idx])
+    
+    # Extract real part of the sensitivity over time
+    sens_array = np.real(sensitivities[output_node][target_component])
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 5), sharex=True)
+    
+    # --- Transient Voltage ---
+    ax1.plot(time, V_out, 'b-', lw=2)
+    ax1.set_ylabel("Voltage (V)")
+    ax1.set_title(f"Transient Sensitivity: Node {output_node} w.r.t {target_component}")
+    ax1.grid(True, ls="--", alpha=0.6)
+
+    # --- Transient Sensitivity ---
+    ax2.plot(time, sens_array, color='red', lw=2)
+    ax2.set_ylabel(f"dV_{output_node} / d{target_component}")
+    ax2.set_xlabel("Time (s)")
+    ax2.grid(True, ls="--", alpha=0.6)
+
+    fig.tight_layout()
+    fig.savefig(f"{folder}/{name}.png", dpi=600)
+    plt.close(fig)
 
 def print_solution(V, node_map, w=0.0):
     """

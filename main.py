@@ -1,102 +1,160 @@
+from gui import CircuitSimulatorGUI
+# Your existing imports
 from txt2dictionary import parse_netlist
 from node_index import build_node_index
-from solver import solve_nonlinear_circuit, solve_linear_circuit, solve_adjoint
-from postprocessing import map_voltages
-from assembleYmatrix import generate_stamps
-import numpy as np
-from tools import run_bode_plot, print_solution, get_all_sensitivities, plot_sensitivity_sweep
-from constants import *
+from simulations import run_op, run_ac_sweep, transient_analysis_loop
+from assembleYmatrix import stamp_linear_components, initialize_stamps
+from sources import evaluate_all_time_sources
+from sensitivity import aggregate_sweep_sensitivities, compute_step_sensitivities
+from tools import make_bode_plot, plot_ac_sensitivity, plot_transient, plot_transient_sensitivity
 
-def estimate_std_dev(sensitivities, components, percent_sigma=0.01):
-    variance = 0
-    for name, sens in sensitivities.items():
-        # Assume 1% is the standard deviation of the component
-        sigma_p = components[name]["value"] * percent_sigma
-        variance += np.abs(sens * sigma_p)**2
-        
-    return np.sqrt(variance)
+def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sensitivity_post=False, keep_lus=False):
+    """
+    Core simulation function.
+    
+    Parameters:
+        netlist_path: path to netlist file
+        output_nodes: list of output nodes to analyze
+        sensitivity: bool, whether to compute sensitivity in place (good when you only need to have the sensitivity at a few output nodes)
+        sensitivity_post: bool, whether to compute sensitivity post-processing (good when you need to have the sensitivity at all output nodes)
+        keep_lus: bool, whether to keep LU matrices (needed for sensitivity post-processing)
+    """
+    components, analyses = parse_netlist(netlist_path)
+    
+    node_map = build_node_index(components)
+    comp_t0 = evaluate_all_time_sources(components, 0.0)
 
-def do_sensitivity_analysis(lu, VI, output_node, node_map, total_dim, w=0.0):
-    # get all node and branch voltages of adjoint circuit
-    PsiPhi = solve_adjoint(lu, output_node, node_map, total_dim)
+    w = 0
+    Y, sources = initialize_stamps(len(node_map), w=w)
+    Y, sources = stamp_linear_components(Y, sources, comp_t0, node_map)
 
-    # get the sensitivities of all components
-    sensitivities = get_all_sensitivities(components, VI, PsiPhi, node_map, w=w)
-    # print(sensitivities)
+    # to expand with other nonlinear components (MOSFETs, etc.)
+    nonlinear = any(name.startswith("D") for name in components.keys())
 
-    # find the standard deviation on the output voltage
-    tolerance_on_components = 0.01
-    std_dev = estimate_std_dev(sensitivities, components, percent_sigma=tolerance_on_components)
-    # print(std_dev)
-    return sensitivities, std_dev
+    x_axis, VI, list_of_lus, raw_sens = None, None, None, None
+    sens_post_proc = None
+
+    # --- Run Analysis ---
+    if ".TRAN" in analyses:
+        print("Running transient analysis...")
+        t_stop, dt = analyses[".TRAN"]["stop"], analyses[".TRAN"]["step"]
+        x_axis, VI, list_of_lus, raw_sens = transient_analysis_loop(
+            Y, sources, components, node_map, t_stop, dt, 
+            output_nodes=output_nodes, nonlinear=nonlinear, 
+            keep_lus=keep_lus, sensitivity=sensitivity
+        )
+
+    elif ".AC" in analyses:
+        print("Running AC analysis...")
+        num_points, start, stop = analyses[".AC"]["num_points"], analyses[".AC"]["start"], analyses[".AC"]["stop"]
+        x_axis, VI, list_of_lus, raw_sens = run_ac_sweep(
+            Y, sources, components, node_map, start_freq=start, stop_freq=stop, 
+            points=num_points, output_nodes=output_nodes, keep_lus=keep_lus, sensitivity=sensitivity
+        )
+
+    else: # OP
+        print("Running OP analysis...")
+        VI, list_of_lus, raw_sens = run_op(Y, sources, components, node_map, sensitivity=sensitivity, nonlinear=nonlinear, w=w)
+
+    # --- Sensitivity Post-Processing ---
+    if sensitivity_post or sensitivity:
+        if output_nodes is None:
+            output_nodes = list(node_map.keys())
+
+        if ".TRAN" in analyses or ".AC" in analyses:
+            sens_post_proc = aggregate_sweep_sensitivities(
+                components, node_map, analyses, raw_sensitivities=raw_sens, 
+                output_nodes=output_nodes, list_of_lus=list_of_lus, 
+                VI_list=VI, freq_list=x_axis if ".AC" in analyses else None
+            )
+        else: #OP, no sweep needed, only one step
+            if sensitivity_post:
+                sens_post_proc = compute_step_sensitivities(list_of_lus, VI, components, node_map, output_nodes, w=w)
+            else:
+                sens_post_proc = raw_sens
+
+
+
+    return {
+        "analyses": analyses,
+        "components": components,
+        "node_map": node_map,
+        "x_axis": x_axis,
+        "VI": VI,
+        "sens_post_proc": sens_post_proc,
+        "output_nodes": output_nodes,
+        "list_of_lus": list_of_lus
+    }
 
 if __name__ == "__main__":
-    test_directory = "testfiles/"
-    netlist = test_directory + "/test_lots_of_diodes.txt"
-
-
-    #-----------------------------------------------------------------------------------
-    # Build circuit
-    #-----------------------------------------------------------------------------------
-    # get components
-    components = parse_netlist(netlist)
-    print(components)
-
-    nonlinear = False
-    for name, comp in components.items():
-        if name.startswith("D"):
-            nonlinear = True
-
-    node_map, total_dim = build_node_index(components)
-
-    # PUT THE FREQUENCY SOMEWHERE ELSE!!
-    w = 2*np.pi * 60
-    if nonlinear:
-        w = 0.0
-
-    Y, sources = generate_stamps(components, node_map, total_dim, w=w)
     
-    #-----------------------------------------------------------------------------------
-    # solve circuit
-    #-----------------------------------------------------------------------------------
-    if nonlinear:
-        V_guess = np.zeros(total_dim)
-        max_iter = 100
-        tol = 1e-9
-        num_ramp_steps = 10
-        lu, VI = solve_nonlinear_circuit(Y, sources, components, node_map, total_dim, V_guess, max_iter=max_iter, tol=tol, num_steps=num_ramp_steps)
+    # ==========================================
+    # TOGGLE THIS TO SWITCH BETWEEN GUI AND CLI
+    USE_GUI = False 
+    # ==========================================
+
+    if USE_GUI:
+        import tkinter as tk
+        from gui import CircuitSimulatorGUI # Make sure your gui code is saved as gui.py
+        
+        root = tk.Tk()
+        app = CircuitSimulatorGUI(root, run_simulation_core) # Pass the core function to the GUI
+        root.mainloop()
+        
     else:
-        lu, VI = solve_linear_circuit(Y, sources)
+        netlist = "transient_diode" # Choose your netlist here
 
-    print_solution(VI, node_map, w=w)
-    #-----------------------------------------------------------------------------------
-    # get sensitivities
-    #-----------------------------------------------------------------------------------
+        file_path = f"./testfiles/{netlist}.txt"
 
-    # # select output node for adjoint input
-    # output_node_for_sensitivity = 3
-    # sensitivities, std_dev = do_sensitivity_analysis(lu, VI, output_node_for_sensitivity, node_map, total_dim, w=w)
-    # print(f"output voltage V = {VI[node_map[output_node_for_sensitivity]]} $\pm$ {std_dev} V")
+        target_node = None # If None, will do adjoint on all nodes
+        target_node_for_plotting = [1, 2]
+        target_component = "R1" # Needed for plotting
+        
+        keep_lus = False
 
-    
-    #-----------------------------------------------------------------------------------
-    # ac stuff
-    #-----------------------------------------------------------------------------------
-    # # Example Bode Plot
-    # run_bode_plot(test_directory + "ac_lowpass.txt", output_node=2, start_freq=10, stop_freq=100000, points=200, name = "lowpass")
-    # run_bode_plot(test_directory + "ac_resonance.txt", output_node=3, start_freq=10, stop_freq=100000, points=200, name = "resonance")
+        # Choose how to compute the sensitivity
+        sensitivity = True # Good for when you only need to have the sensitivity at a few output nodes (less memory needed)
+        sens_post_proc = False # Good when you need to have the sensitivity at all output nodes
 
-    # # Example ac sensitivity
-    # print("do sweep")
-    # plot_sensitivity_sweep(components, output_node_for_sensitivity, "R1", start_f=10, end_f=1000, name="sensitiviy")
-
-    
-
+        if sens_post_proc:
+            sensitivity = False
+            keep_lus = True
+        elif sensitivity:
+            sens_post_proc = False
+            keep_lus = False
+        else:
+            keep_lus = False
+            sens_post_proc = False
+            sensitivity = False
 
 
+        results = run_simulation_core(
+            file_path, output_nodes=target_node, 
+            sensitivity=sensitivity, sensitivity_post=sens_post_proc, keep_lus=keep_lus
+        )
+        
+        # Unpack results
+        analyses = results["analyses"]
+        x_axis = results["x_axis"]
+        VI = results["VI"]
+        node_map = results["node_map"]
 
+        sensitivities_list = results["sens_post_proc"]
+        
+        # Visualize
+        if ".AC" in analyses:
+            make_bode_plot(x_axis, VI, node_map, target_node_for_plotting, folder="./figures/ac", name=f"{netlist}_bode")
+            if sens_post_proc or sensitivity:
+                plot_ac_sensitivity(x_axis, VI, sensitivities_list, node_map, target_node_for_plotting, target_component=target_component, folder="./figures/ac", name=f"{netlist}_ac_sens")
 
+        elif ".TRAN" in analyses:
+            plot_transient(x_axis, VI, node_map, target_node_for_plotting, folder="./figures/tran", name=f"{netlist}_tran")
+            if sens_post_proc or sensitivity:
+                plot_transient_sensitivity(x_axis, VI, sensitivities_list, node_map, target_node_for_plotting, target_component=target_component, folder="./figures/tran", name=f"{netlist}_tran_sens")
 
-
-
-
+        else:
+            if sens_post_proc or sensitivity:
+                if target_node is None:
+                    target_node = list(node_map.keys())
+                print(f"Sensitivity for all components and output nodes {target_node}")
+                print(f"Sensitivity: {sensitivities_list}")
