@@ -90,7 +90,7 @@ if __name__ == "__main__":
     
     # ==========================================
     # TOGGLE THIS TO SWITCH BETWEEN GUI AND CLI
-    USE_GUI = False 
+    USE_GUI = True 
     # ==========================================
 
     if USE_GUI:

@@ -99,7 +99,7 @@ class CircuitSimulatorGUI:
             # Call the main engine!
             self.sim_data = self.run_simulation_core(
                 self.current_file_path, 
-                sensitivity_post=False # Set True if you want to enable sensitivity in GUI
+                sensitivity_post=True # Set True if you want to enable sensitivity in GUI
             )
             
             node_map = self.sim_data["node_map"]
@@ -120,7 +120,7 @@ class CircuitSimulatorGUI:
                     self.node_listbox.selection_set(tk.END)
 
             # Route to correct tab
-            if ".op" in analyses and ".TRAN" not in analyses and ".ac" not in analyses:
+            if ".OP" in analyses and ".TRAN" not in analyses and ".AC" not in analyses:
                 self.update_data_tab_op()
                 self.tabs.select(self.tab_data)
             else:
@@ -166,7 +166,7 @@ class CircuitSimulatorGUI:
         sorted_sim_indices = sorted(idx_to_node.keys(), key=lambda i: str(idx_to_node[i]))
 
         # --- AC / BODE PLOT ---
-        if ".ac" in analyses:
+        if ".AC" in analyses:
             ax1 = self.fig.add_subplot(211)
             ax2 = self.fig.add_subplot(212, sharex=ax1)
             
