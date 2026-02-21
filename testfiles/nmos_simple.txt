@@ -1,0 +1,7 @@
+* simple diode-connected MOSFET with a resistor
+
+V1 1 0 10
+M1 2 1 0 0 NMOS
+R1 1 2 10
+
+*I1 1 2 77

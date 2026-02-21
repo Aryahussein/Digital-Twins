@@ -52,8 +52,11 @@ def parse_netlist(file_path):
             # Convert nodes to integers if possible (assuming '0' is ground)
             '''n1 = int(n1)
             n2 = int(n2)'''
-            value = parse_value(value_str)
-
+            if value_str != 'NMOS':
+                value = parse_value(value_str)
+            elif value_str == 'NMOS':
+                value = value_str               # parse value = "NMOS" as the string; probably should be changed to 1=NMOS, 2=PMOS
+            
             components[name] = {"n1": n1, "n2": n2, "n3": n3, "n4": n4, "value": value}
 
     return components

@@ -29,11 +29,12 @@ def solve_adjoint(lu, target, var_map, total_dim):
     d[idx] = 1.0
     return lu.solve(d, trans='T')
 
-def solve_nonlinear_circuit(Y_ori, sources_ori, components, node_map, total_dim, V_ini, max_iter=100, tol=1e-6, num_steps=10):
+def solve_nonlinear_circuit(Y_ori, sources_ori, components, node_map, total_dim, V_ini, max_iter=1000, tol=1e-6, num_steps=10):
     # Source Ramping: k goes from 0.1 to 1.0
     ramp = np.linspace(1.0/num_steps, 1.0, num_steps)
 
     V_k = V_ini.copy()
+    prev_V_k = V_k.copy()       ### Note: added initial prev_V_k here
     lu = np.empty((total_dim, total_dim))
     for k in ramp:
         print(f"\n--- Ramping Source: {k*100:.1f}% ---")
@@ -41,11 +42,15 @@ def solve_nonlinear_circuit(Y_ori, sources_ori, components, node_map, total_dim,
         Y_k = Y_ori.copy()
         
         for i in range(max_iter):
-            prev_V_k = V_k.copy()
             
             # 1. Generate linearized Y and I for the current guess V_k
             Y_iter, sources_iter = update_nonlinear_stamps(Y_k, sources_k, components, node_map, prev_V_k, V_k)
-            
+
+            print(f"\n\nY_iter = {Y_iter}")                         ### debug
+            print(f"\nsources_iter = {sources_iter}\n\n")           ### debug
+
+            prev_V_k = V_k.copy()       ### Note: moved to *after* stamp generation to save V_k before new V_k found
+
             # 2. Solve the linear system
             lu, V_new = solve_linear_circuit(Y_iter, sources_iter)
             
@@ -57,9 +62,9 @@ def solve_nonlinear_circuit(Y_ori, sources_ori, components, node_map, total_dim,
             V_k = V_new # Update guess for next iteration
             print(f"Iteration: {i}, error = {max_error}")
             if max_error < tol:
-                print(f"Converged in {i+1} iterations.")
+                print(f"Converged in {i+1} iterations. \n\tdelta_v = {delta_v} \n\tmax_error = {max_error}")
                 break
         else:
-            raise RuntimeError(f"Newton-Raphson failed to converge at {k*100}% ramp.")
+            raise RuntimeError(f"Newton-Raphson failed to converge at {k*100}% ramp. \n\tdelta_v = {delta_v} \n\tmax_error = {max_error}")
             
     return lu, V_k # Return final solution and the last factorized matrix

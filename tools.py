@@ -211,7 +211,8 @@ def print_solution(V, node_map, w=0.0):
         else:
             mag = np.abs(val)
             phase = np.degrees(np.angle(val))
-            print(f"  Node {node}: {mag:10.6f} V ∠ {phase:7.2f}°")
+            ###print(f"  Node {node}: {mag:10.6f} V ∠ {phase:7.2f}°")
+            print(f"  Node {node}: {mag:10.6f} V angle {phase:7.2f}degree")
 
     # 2. Print Branch Currents
     if branches:

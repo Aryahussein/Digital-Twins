@@ -32,7 +32,8 @@ def do_sensitivity_analysis(lu, VI, output_node, node_map, total_dim, w=0.0):
 
 if __name__ == "__main__":
     test_directory = "testfiles/"
-    netlist = test_directory + "/test_lots_of_diodes.txt"
+    netlist = test_directory + "/nmos_common_source.txt"            ### debug
+    ###netlist = test_directory + "/nmos_simple.txt"
 
 
     #-----------------------------------------------------------------------------------
@@ -44,13 +45,14 @@ if __name__ == "__main__":
 
     nonlinear = False
     for name, comp in components.items():
-        if name.startswith("D"):
+        if name.startswith("D") or name.startswith("M"):
             nonlinear = True
 
     node_map, total_dim = build_node_index(components)
 
     # PUT THE FREQUENCY SOMEWHERE ELSE!!
-    w = 2*np.pi * 60
+    #w = 2*np.pi * 60
+    w = 0.0
     if nonlinear:
         w = 0.0
 
@@ -61,7 +63,7 @@ if __name__ == "__main__":
     #-----------------------------------------------------------------------------------
     if nonlinear:
         V_guess = np.zeros(total_dim)
-        max_iter = 100
+        max_iter = 1000                     ### changed to 1000
         tol = 1e-9
         num_ramp_steps = 10
         lu, VI = solve_nonlinear_circuit(Y, sources, components, node_map, total_dim, V_guess, max_iter=max_iter, tol=tol, num_steps=num_ramp_steps)
@@ -69,6 +71,10 @@ if __name__ == "__main__":
         lu, VI = solve_linear_circuit(Y, sources)
 
     print_solution(VI, node_map, w=w)
+
+    ###print(f"Y = {Y}")
+    ###print(f"sources = {sources}")
+    
     #-----------------------------------------------------------------------------------
     # get sensitivities
     #-----------------------------------------------------------------------------------
@@ -89,14 +95,3 @@ if __name__ == "__main__":
     # # Example ac sensitivity
     # print("do sweep")
     # plot_sensitivity_sweep(components, output_node_for_sensitivity, "R1", start_f=10, end_f=1000, name="sensitiviy")
-
-    
-
-
-
-
-
-
-
-
-
