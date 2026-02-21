@@ -1,0 +1,6 @@
+* Voltage Divider - OP Test
+* Expected: Node 1 = 10V, Node 2 = 5V, I(V1) = -10mA
+V1 1 0 DC 10
+R1 1 2 1k
+R2 2 0 1k
+.OP

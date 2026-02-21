@@ -1,0 +1,6 @@
+* RC Transient - Step Response
+* Tau = RC = 1k * 1u = 1ms
+V1 1 0 PULSE(0 5 0 1n 1n 5m 10m)
+R1 1 2 1k
+C1 2 0 1u
+.TRAN 10u 20m
