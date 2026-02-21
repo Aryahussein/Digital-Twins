@@ -24,12 +24,11 @@ def build_node_index(components):
 
     # 2. Map MNA Components (Branch Currents)
     for name in components:
-        if name.startswith(("V")) or name.startswith(("L")):
+        if name.startswith(("V", "L")):
             node_map[name] = current_idx
             current_idx += 1
             
     total_dim = current_idx
-
     return node_map, total_dim
 
 def invert_node_index(node_index):

@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.sparse import lil_matrix
+from constants import *
 
 def get_idx(node, node_map):
     """Returns the matrix index for a node/name, or None if it is Ground (0)."""
@@ -132,117 +133,198 @@ def stamp_vccs(Y, n1, n2, n3, n4, value, node_map):
         if x is not None: Y[k, x] -= value
         if y is not None: Y[k, y] += value
 
-def stamp_capacitor_backward_euler(G, b, comp, dt, v_prev, node_map):
+
+def pnjlim(v_new, v_old, critical_v):
     """
-    Stamp a capacitor into the MNA matrix using Backward Euler.
-
-    Parameters:
-        G       : Admittance matrix (numpy array)
-        b       : RHS vector (numpy array)
-        comp    : Component dictionary entry for capacitor
-        dt      : Time step
-        v_prev  : Previous timestep node voltage vector
+    Standard SPICE limiting algorithm for PN junctions.
+    Prevents V_guess from jumping too far in one iteration.
     """
+    if v_new > critical_v and abs(v_new - v_old) > (2 * Vt):
+        if v_old > critical_v:
+            # If we were already above critical, limit the rate of change
+            v_limit = v_old + 2 * Vt * np.log(v_new / v_old)
+        else:
+            # If we are crossing the threshold, land exactly at critical_v
+            v_limit = critical_v
+        return v_limit
+    return v_new
 
-    n1 = comp["n1"]
-    n2 = comp["n2"]
-    C = comp["value"]
+def stamp_diode(Y, sources, n1, n2, Is, p_V_guess, V_guess, node_map):
+    idx1, idx2 = get_idx(n1, node_map), get_idx(n2, node_map)
+    
+    # Calculate current Vd from the previous iteration's guess
+    v1 = V_guess[idx1] if idx1 is not None else 0
+    v2 = V_guess[idx2] if idx2 is not None else 0
+    vd_k = v1 - v2
+    
+    p_v1 = p_V_guess[idx1] if idx1 is not None else 0
+    p_v2 = p_V_guess[idx2] if idx2 is not None else 0
+    p_vd_k = p_v1 - p_v2
 
-    # Equivalent conductance
-    G_eq = C / dt
+    # limit the amount v can jump at a time & prevent overflows
+    n_vd_k = pnjlim(vd_k, p_vd_k, 1)
 
-    i1 = get_idx(n1, node_map)
-    i2 = get_idx(n2, node_map)
+    # 1. Calculate linearization components
+    exp_term = np.exp(n_vd_k / Vt)
+    id_k = Is * (exp_term - 1)
 
-    # Voltage difference from previous timestep
-    v1_prev = v_prev[i1] if i1 is not None else 0.0
-    v2_prev = v_prev[i2] if i2 is not None else 0.0
-
-    I_eq = G_eq * (v1_prev - v2_prev)
-
-    # Stamp conductance matrix
-    if i1 is not None:
-        G[i1, i1] += G_eq
-    if i2 is not None:
-        G[i2, i2] += G_eq
-    if i1 is not None and i2 is not None:
-        G[i1, i2] -= G_eq
-        G[i2, i1] -= G_eq
-
-    # Stamp RHS vector
-    if i1 is not None:
-        b[i1] += I_eq
-    if i2 is not None:
-        b[i2] -= I_eq
-
-
-def stamp_inductor_backward_euler(G, b, comp, dt, v_prev, sources_prev, node_map, name):
-    """
-    Stamp a capacitor into the MNA matrix using Backward Euler.
-
-    Parameters:
-        G       : Admittance matrix (numpy array)
-        b       : RHS vector (numpy array)
-        comp    : Component dictionary entry for inductor
-        dt      : Time step
-        v_prev  : Previous timestep node voltage vector
-    """
-
-    n1 = comp["n1"]
-    n2 = comp["n2"]
-    L = comp["value"]
-
-    idx = node_map[name]
-    i, j = get_idx(n1, node_map), get_idx(n2, node_map)
+    # gd = dI/dV = linear conductance
+    gd = (Is / Vt) * exp_term
+    
+    # linearized companion model
+    ieq = id_k - gd * n_vd_k
+    
+    # 2. Stamp gd into Y (like a resistor)
+    if idx1 is not None:
+        Y[idx1, idx1] += gd
+        if idx2 is not None:
+            Y[idx1, idx2] -= gd
+            Y[idx2, idx1] -= gd
+    if idx2 is not None:
+        Y[idx2, idx2] += gd
         
-    # 1. KCL Connections (Same as Voltage Source)
-    if i is not None:
-        G[i, idx] += 1
-        G[idx, i] += 1
-    if j is not None:
-        G[j, idx] -= 1
-        G[idx, j] -= 1
+    # 3. Stamp Ieq into RHS vector
+    if idx1 is not None: sources[idx1] -= ieq
+    if idx2 is not None: sources[idx2] += ieq
 
-    # 2. Impedance Term (subtracted from diagonal)
-    R_eq = L / dt
-    G[idx, idx] -= R_eq
+def nmos_lim(vds_new, vds_old, critical_vds):
+    """
+    Standard SPICE limiting algorithm for nMOS junctions.
+    Prevents Vds from jumping from one region to the other without stopping at the boundary.
+        (currently just triode <-> saturation)
+    """
 
-    # Equivalent current (for RHS)
-    I_eq = v_prev[idx]
+    if vds_new > critical_vds and abs(vds_new - vds_old) > (2 * Vt):
+        if vds_old > critical_vds:
+            # If we were already above critical, limit the rate of change
+            v_limit = vds_old + 2 * Vt * np.log(vds_new / vds_old)
+        else:
+            # If we are crossing the threshold, land exactly at critical_v
+            v_limit = critical_vds
+        return v_limit
+    return vds_new
 
-    # Thevenin equivalent (L/dt)*i(t)
-    V_eq = L*v_prev[idx] / dt
-    b[idx] -= V_eq
-   
+
+def nmos_region(vgs, vds, vth):
+    """
+    Finds mosfet region of operation: 0 cut-off, 1 triode, 2 sat, 3 subth, 4 breakdown
+    """
+    
+    if vgs < vth:                           # off
+        return 0
+    elif vgs >= vth and vds < (vgs-vth):    # triode
+        return 1
+    elif vgs >= vth and vds >= (vgs-vth):   # sat
+        return 2
+
+def stamp_nmos(Y, sources, n1, n2, n3, value, p_V_guess, V_guess, node_map):
+    unCox = 100e-6          # Hard-coded value for a typical mosfet
+    W_over_L = 1            # Hard-coded placeholder
+    Bn = unCox*W_over_L     # Hard-coded placeholder
+    Vth = 0.4               # Hard-coded placeholder
+
+    if (value == "NMOS"):
+        idx1, idx2, idx3 = get_idx(n1, node_map), get_idx(n2, node_map), get_idx(n3, node_map)         # get index of nodes 1,2,3 (D,G,S)
+    else:
+        raise RuntimeError(f"Unrecognized value {value}")
+
+    # Find voltages of Vgs and Vds for the new guess
+    v1 = V_guess[idx1] if idx1 is not None else 0
+    v2 = V_guess[idx2] if idx2 is not None else 0
+    v3 = V_guess[idx3] if idx3 is not None else 0
+    vgs_k = v2 - v3
+    vds_k = v1 - v3
+
+    # Find voltages of Vgs and Vds for the previous guess
+    p_v1 = p_V_guess[idx1] if idx1 is not None else 0
+    p_v2 = p_V_guess[idx2] if idx2 is not None else 0
+    p_v3 = p_V_guess[idx3] if idx3 is not None else 0
+    p_vgs_k = p_v2 - p_v3
+    p_vds_k = p_v1 - p_v3
+
+    # Limit the change of Vds possible in one guess
+    vds_k = nmos_lim(vds_k, p_vds_k, 0.2)
+        ### it will probably be necessary to limit the change of Vgs in one guess
+
+    # Find the operating region for current and previous 
+    region = nmos_region(vgs_k, vds_k, Vth)
+    print(f"    Current nMOS region={region} for vgs={vgs_k}, vds={vds_k}, vth={Vth}")
+    p_region = nmos_region(p_vgs_k, p_vds_k, Vth)
+    print(f"    Previous nMOS region={p_region} for vgs={p_vgs_k}, vds={p_vds_k}, vth={Vth}")
+
+    # Region has not changed
+    if (region == p_region):
+        print(f"    region unchanged from {region}")
+        if (region == 0):
+            Id = 0                                                  # Id for Off state
+        elif (region == 1):
+            Id = Bn*((vgs_k-Vth)*vds_k-(vds_k**2)/2) + 1e-6         # Id for Triode state
+        elif (region == 2):
+            Id = Bn*((vgs_k-Vth)**2) + 1e-6                         # Id for Saturation state
+        else:
+            print(f"    Error: nMOS {region} region operation not supported")
+
+    # Region changed; set Id to the edge of the old/new regions
+    else:
+        print(f"    region changed from {p_region} to {region}")
+        if (p_region == 0):                                                 # Transitioning from Off->Triode
+            Id = Bn*((Vth-Vth)*vds_k-(vds_k**2)/2)                          # Find Id with Vgs=Vth and current_Vds
+        
+        elif (p_region == 1):                                               # Transitioning from Triode to Off/Saturation
+
+            if (region == 0):                                               # Transitioning from Triode->Off
+                Id = Bn*((Vth-Vth)*vds_k-(vds_k**2)/2)                      # Find Id with Vgs=Vth and current_Vds
+            
+            elif (region == 2):                                             # Transitioning from Triode->Saturation
+                Id = Bn*((Vth-Vth)*(vgs_k-Vth)-((vgs_k-Vth)**2)/2)          # Find Id with Vds=Vgs-Vth and Vgs=Vth      ***Should Vgs=Vth be used here***
+
+        elif (p_region == 2):
+            Id = Bn*((vgs_k-Vth)*(vgs_k-Vth)-((vgs_k-Vth)**2)/2)            # Find Id with Vds=Vgs-Vth and Vgs=Vth      ***Should Vgs=Vth be used here***
+
+    print(f"    Id = {Id}")
+
+    if idx1 is not None: sources[idx1] -= Id
+    if idx3 is not None: sources[idx3] += Id
 
 
-def generate_stamps(components, node_map, total_dim, w=0):
+def update_nonlinear_stamps(Y_ori, sources_ori, components, node_map, prev_V_guess, V_guess):
+    """
+    Maintains the base linear circuit and injects updated non-linear models.
+    """
+    # Create fresh copies of the linear base for this iteration
+    Y = Y_ori.copy().tolil() 
+    sources = sources_ori.copy()
+    
+    for name, comp in components.items():
+        if name.startswith("D"):
+            stamp_diode(Y, sources, comp['n1'], comp['n2'], comp.get('value', 1e-12), prev_V_guess, V_guess, node_map)
+
+        # if name.startswith("M")
+        #     stamp_mosfet()
+
+        if name.startswith("M"):     ### note: replace this with better accuracy for the nMOS stamps
+            stamp_nmos(Y, sources, comp['n1'], comp['n2'], comp['n3'], comp.get('value'), prev_V_guess, V_guess, node_map)
+
+
+
+    return Y.tocsc(), sources
+
+def generate_stamps(components, node_map, total_dim, w=0.0):
     """
     w: Angular frequency (rad/s). Set to 0 for DC.
     """
     # Matrix must be complex to handle AC, even if w=0
-    dtype = float if w == 0 else complex
+    dtype = float if w==0 else complex
     Y = lil_matrix((total_dim, total_dim), dtype=dtype)
     sources = np.zeros(total_dim, dtype=dtype)
 
     for name, comp in components.items():
-
         # Extract basic nodes (default to 0 if not present)
         n1 = comp.get("n1", 0)
         n2 = comp.get("n2", 0)
         n3 = comp.get("n3", 0)
         n4 = comp.get("n4", 0)
-
-        # Non-time-varying components
-        if "source" not in comp:
-            val = comp["value"]
-
-        # Time-varying components
-        else:
-            if comp["source"]["type"] == "PULSE":
-                val = comp["source"]["V1"]
-            elif comp["source"]["type"] == "SIN" or comp["source"]["type"] == "COS":
-                val = comp["source"]["VOFF"]
+        val = comp["value"]
 
         if name.startswith("R"):
             stamp_resistor(Y, n1, n2, val, node_map)
@@ -263,50 +345,12 @@ def generate_stamps(components, node_map, total_dim, w=0):
         elif name.startswith("L"):
             stamp_inductor(Y, n1, n2, val, w, name, node_map)
 
-    return Y.tocsc(), sources
-
-def generate_stamps_transient(components, node_map, total_dim, v_hist, sources_hist, dt, method, step):
-    """
-        w: Angular frequency (rad/s). Set to 0 for DC.
-        """
-    # Matrix must be complex to handle AC, even if w=0
-    dtype = float
-    Y = lil_matrix((total_dim, total_dim), dtype=dtype)
-    sources = np.zeros(total_dim, dtype=dtype)
-
-    for name, comp in components.items():
-        # Extract basic nodes (default to 0 if not present)
-        n1 = comp.get("n1", 0)
-        n2 = comp.get("n2", 0)
-        n3 = comp.get("n3", 0)
-        n4 = comp.get("n4", 0)
-        val = comp["value"]
-
-        if name.startswith("R"):
-            stamp_resistor(Y, n1, n2, val, node_map)
-
-        elif name.startswith("C"):
-            if method == "BE":
-                stamp_capacitor_backward_euler(Y, sources, comp, dt, v_hist, node_map)
-
-        
-
-        elif name.startswith("L"):
-                 # its necessary to add dimensions to the Y matrix 
-                 # (could also be done in the DC OP step, and then that Y matrix is passed into the transient solves)
-            #stamp_inductor(Y, n1, n2, val, 0, name, node_map)
-            if method == "BE":
-                stamp_inductor_backward_euler(Y, sources, comp, dt, v_hist, sources_hist, node_map, name)
-
-        elif name.startswith("I"):
-            stamp_current_source(sources, n1, n2, val, node_map)
-
-        elif name.startswith("G"):
-            stamp_vccs(Y, n1, n2, n3, n4, val, node_map)
-
-        elif name.startswith("V"):
-            # We pass 'name' (e.g., 'V1') to look up its MNA row
-            stamp_independent_voltage(Y, sources, n1, n2, val, name, node_map)
-
+        # only stamp linear components here!!
+        # stamp only the nonlinear ones using the update stamps
+        # elif name.startswith("D"):
+        #     if V_guess == None: 
+        #         raise ValueError("Initial V_guess was not defined correctly!")
+        #     prev_V_guess = V_guess.copy()
+        #     stamp_diode(Y, sources, n1, n2, comp.get("Is"), prev_V_guess, V_guess, node_map)
 
     return Y.tocsc(), sources

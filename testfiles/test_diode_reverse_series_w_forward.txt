@@ -1,0 +1,9 @@
+* 10V Input Source
+V1 1 0 10
+
+* Bridge Diodes (Anode Cathode)
+D1 2 1 1e-14
+D2 2 3 1e-14
+
+* Load Resistor
+* Rload 3 0 1000

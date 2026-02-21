@@ -1,0 +1,15 @@
+LTspice 26.0.1 for Windows
+Circuit: C:\Users\judes\Desktop\UTD Grad Courses\Spring 2026\EECT 7v88\Digital-Twins-main\LTSpice_files\nMOS_Common_Source.net
+Start Time: Sat Feb 21 16:00:22 2026
+solver = Normal
+Maximum thread count: 16
+tnom = 27
+temp = 27
+method = trap
+Direct Newton iteration succeeded in finding operating point.
+Total elapsed time: 0.093 seconds.
+
+Files loaded:
+C:\Users\judes\Desktop\UTD Grad Courses\Spring 2026\EECT 7v88\Digital-Twins-main\LTSpice_files\nMOS_Common_Source.net
+C:\Users\judes\AppData\Local\LTspice\lib\cmp\standard.mos
+
