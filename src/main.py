@@ -13,9 +13,6 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
     components, analyses = parser.parse(netlist_path)
     node_map = build_node_index(components)
 
-    print(components)
-    print(analyses)
-
     # 2. Setup Solver (Matrix and Nonlinearity logic is now INSIDE the class)
     sim = Simulator(components, analyses, node_map, output_nodes)
 
@@ -25,23 +22,25 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
         keep_lus=(keep_lus or sensitivity_post)
     )
 
-    # 4. Handle Post-Processing Sensitivity
+
     sens_post_proc = raw_sens
-    if sensitivity_post:
-        # If we didn't compute it in-loop, do it now
+
+    # 4. Handle Post-Processing Sensitivity
+    if sensitivity_post or sensitivity:
+        if output_nodes is None:
+            output_nodes = list(node_map.keys())
+
         if ".TRAN" in analyses or ".AC" in analyses:
-            dt = analyses[".TRAN"]["step"] if ".TRAN" in analyses else None
             sens_post_proc = aggregate_sweep_sensitivities(
-                components, node_map, analyses, raw_sensitivities=raw_sens,
-                output_nodes=(output_nodes or list(node_map.keys())),
-                list_of_lus=list_of_lus, VI_list=VI, 
-                freq_list=x_axis if ".AC" in analyses else None, dt=dt
+                components, node_map, analyses, raw_sensitivities=raw_sens, 
+                output_nodes=output_nodes, list_of_lus=list_of_lus, 
+                VI_list=VI, freq_list=x_axis if ".AC" in analyses else None
             )
-        else: # OP single step
-            sens_post_proc = compute_step_sensitivities(
+        else: #OP, no sweep needed, only one step
+            if sensitivity_post:
+                sens_post_proc = compute_step_sensitivities(
                 list_of_lus, VI, components, node_map, output_nodes, 
-                w=(analyses.get(".OP", {}).get("freq", 0.0) * 2 * np.pi)
-            )
+                w=(analyses.get(".OP", {}).get("freq", 0.0) * 2 * np.pi))
 
     return {
         "analyses": analyses, "components": components, "node_map": node_map,
@@ -65,7 +64,7 @@ if __name__ == "__main__":
         root.mainloop()
         
     else:
-        netlist = "transient_diode" # Choose your netlist here
+        netlist = "rc_lowpass" # Choose your netlist here
 
         file_path = f"../testfiles/{netlist}.txt"
 
@@ -103,6 +102,8 @@ if __name__ == "__main__":
         node_map = results["node_map"]
 
         sensitivities_list = results["sens_post_proc"]
+
+        print(sensitivities_list)
         
         # Visualize
         if ".AC" in analyses:
