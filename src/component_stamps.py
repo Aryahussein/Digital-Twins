@@ -350,13 +350,15 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
     
     # Is = comp["model_params"]["IS"]
     params = comp["model_params"]
-    m_type = comp["model"] # Default to NMOS if not specified
+    inst_params = comp["inst_params"]
+    # print(params)
+    m_type = comp["model_type"] # Default to NMOS if not specified
     # m_type = params["model"]
     
     # Default Level 1 parameters
     VTO = params["VTO"]       # Zero-bias threshold voltage
-    W = params["W"]             # width
-    L = params["L"]             # Length
+    W = inst_params["W"]             # width
+    L = inst_params["L"]             # Length
     mu = params["MU"]           # mobility
     # LAMBDA = params["LAMBDA"] # Channel length modulation
     # GAMMA = params.get("GAMMA", 0.0)   # Body effect parameter

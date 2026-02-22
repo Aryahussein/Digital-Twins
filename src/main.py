@@ -1,4 +1,4 @@
-from txt2dictionary import parse_netlist
+from parser import NetlistParser
 from node_index import build_node_index
 from simulations import run_op, run_ac_sweep, transient_analysis_loop
 from assembleYmatrix import stamp_linear_components, stamp_static_components, initialize_stamps
@@ -17,7 +17,8 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
         sensitivity_post: bool, whether to compute sensitivity post-processing (good when you need to have the sensitivity at all output nodes)
         keep_lus: bool, whether to keep LU matrices (needed for sensitivity post-processing)
     """
-    components, analyses = parse_netlist(netlist_path)
+    parser = NetlistParser()
+    components, analyses = parser.parse(netlist_path)
     print(components)
     
     node_map = build_node_index(components)
@@ -30,15 +31,16 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
     x_axis, VI, list_of_lus, raw_sens = None, None, None, None
     sens_post_proc = None
 
+    w = 0
+    Y, sources = initialize_stamps(len(node_map), w=w)
+    Y, sources = stamp_static_components(Y, sources, comp_t0, node_map)
+
     # --- Run Analysis ---
     if ".TRAN" in analyses:
         print("Running transient analysis...")
         # For transient: base matrix has ONLY static components (R, G).
         # Sources (V, I) are stamped per time step in stamp_transient_components
         # to avoid double-stamping and to handle time-varying source values.
-        w = 0
-        Y, sources = initialize_stamps(len(node_map), w=w)
-        Y, sources = stamp_static_components(Y, sources, comp_t0, node_map)
 
         t_stop, dt = analyses[".TRAN"]["stop"], analyses[".TRAN"]["step"]
         x_axis, VI, list_of_lus, raw_sens = transient_analysis_loop(
@@ -51,9 +53,6 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
         print("Running AC analysis...")
         # For AC: base matrix has all linear components (R, G, V, I).
         # Dynamic components (C, L) are added per frequency step.
-        w = 0
-        Y, sources = initialize_stamps(len(node_map), w=w)
-        Y, sources = stamp_linear_components(Y, sources, comp_t0, node_map)
 
         num_points, start, stop = analyses[".AC"]["num_points"], analyses[".AC"]["start"], analyses[".AC"]["stop"]
         x_axis, VI, list_of_lus, raw_sens = run_ac_sweep(
@@ -63,9 +62,6 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
 
     else: # OP
         print("Running OP analysis...")
-        w = 0
-        Y, sources = initialize_stamps(len(node_map), w=w)
-        Y, sources = stamp_linear_components(Y, sources, comp_t0, node_map)
 
         VI, list_of_lus, raw_sens = run_op(Y, sources, components, node_map, sensitivity=sensitivity, nonlinear=nonlinear, w=w)
 
