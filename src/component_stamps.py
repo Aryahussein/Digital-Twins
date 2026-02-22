@@ -7,6 +7,25 @@ def get_idx(node, node_map):
         return None
     return node_map.get(node)
 
+def stamp_mna_connection(Y, comp, node_map, name):
+    """
+    Stamps ONLY the topological 1/-1 connections for MNA branch equations.
+    Used for V and L.
+    """
+    idx = node_map[name]
+    # Handle both V (n1, n2) and M/L (n_d, n_s) terminal names
+    n1 = comp.get("n1")
+    n2 = comp.get("n2")
+    
+    i, j = get_idx(n1, node_map), get_idx(n2, node_map)
+
+    if i is not None:
+        Y[i, idx] += 1
+        Y[idx, i] += 1
+    if j is not None:
+        Y[j, idx] -= 1
+        Y[idx, j] -= 1
+
 # =============================================================================
 # LINEAR STATIC STAMPS (Resistors, Sources, VCCS)
 # =============================================================================
@@ -46,31 +65,39 @@ def stamp_current_source(Y, sources, comp, node_map, name):
     if i is not None: sources[i] -= value
     if j is not None: sources[j] += value
 
+# def stamp_independent_voltage(Y, sources, comp, node_map, name):
+#     """
+#     Stamps an independent voltage source using MNA (extra row/col).
+#     Y: NxN sparse lilmatrix (complex)
+#     sources: RHS source vector (complex)
+#     n1, n2: node numbers (n1=positive, n2=negative)
+#     value: voltage value (Volts)
+#     name: matrix index for the branch current variable
+#     node_map: dict mapping node numbers to matrix indices
+#     """
+#     n1, n2 = comp["n1"], comp["n2"]
+#     value = comp["value"]
+#     idx = node_map[name] 
+#     i, j = get_idx(n1, node_map), get_idx(n2, node_map)
+#
+#     # print(f"stamping {name} with value {value}")
+#     
+#     if i is not None:
+#         Y[i, idx] += 1
+#         Y[idx, i] += 1
+#     if j is not None:
+#         Y[j, idx] -= 1
+#         Y[idx, j] -= 1
+#
+#     sources[idx] = value
+
 def stamp_independent_voltage(Y, sources, comp, node_map, name):
     """
-    Stamps an independent voltage source using MNA (extra row/col).
-    Y: NxN sparse lilmatrix (complex)
-    sources: RHS source vector (complex)
-    n1, n2: node numbers (n1=positive, n2=negative)
-    value: voltage value (Volts)
-    name: matrix index for the branch current variable
-    node_map: dict mapping node numbers to matrix indices
+    Value-only stamper for Voltage Sources. 
+    Assumes Y-matrix structure is already set by stamp_mna_connection.
     """
-    n1, n2 = comp["n1"], comp["n2"]
-    value = comp["value"]
-    idx = node_map[name] 
-    i, j = get_idx(n1, node_map), get_idx(n2, node_map)
-
-    # print(f"stamping {name} with value {value}")
-    
-    if i is not None:
-        Y[i, idx] += 1
-        Y[idx, i] += 1
-    if j is not None:
-        Y[j, idx] -= 1
-        Y[idx, j] -= 1
-
-    sources[idx] = value
+    idx = node_map[name]
+    sources[idx] = comp["value"]
 
 def stamp_vccs(Y, source, comp, node_map, name):
     """
@@ -137,21 +164,9 @@ def stamp_inductor(Y, sources, comp, node_map, name, w=0.0):
     # Equation: V_n1 - V_n2 - (jwL)*I_L = 0
     # At DC (w=0), this becomes V_n1 - V_n2 = 0 (Short Circuit)
 
-    n1, n2 = comp["n1"], comp["n2"]
     L = comp["value"]
-
     idx = node_map[name]
-    i, j = get_idx(n1, node_map), get_idx(n2, node_map)
-    
     Z_L = 1j * w * L
-    
-    # 1. KCL Connections (Same as Voltage Source)
-    if i is not None:
-        Y[i, idx] += 1
-        Y[idx, i] += 1
-    if j is not None:
-        Y[j, idx] -= 1
-        Y[idx, j] -= 1
         
     # 2. Impedance Term (subtracted from diagonal)
     Y[idx, idx] -= Z_L
@@ -217,21 +232,9 @@ def stamp_inductor_be(Y, sources, comp, node_map, name, dt, v_prev):
         dt      : Time step
         v_prev  : Previous timestep node voltage vector
     """
-
-    n1 = comp["n1"]
-    n2 = comp["n2"]
     L = comp["value"]
 
     idx = node_map[name]
-    i, j = get_idx(n1, node_map), get_idx(n2, node_map)
-        
-    # 1. KCL Connections (Same as Voltage Source)
-    if i is not None:
-        Y[i, idx] += 1
-        Y[idx, i] += 1
-    if j is not None:
-        Y[j, idx] -= 1
-        Y[idx, j] -= 1
 
     # 2. Impedance Term (subtracted from diagonal)
     R_eq = L / dt

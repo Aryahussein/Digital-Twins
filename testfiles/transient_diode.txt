@@ -1,0 +1,11 @@
+vin 1 0 SIN(0 10 60)
+
+d1 1 2 D1N4148
+
+r1 2 0 1k
+
+.MODEL D1N4148 D (IS=2.682n N=1.836 RS=.5664)
+
+.TRAN 0.1m 50m
+
+.END

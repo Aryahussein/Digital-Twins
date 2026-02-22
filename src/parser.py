@@ -88,7 +88,7 @@ class NetlistParser:
             if len(tokens) < 5: 
                 self._throw_error("Expected '.AC TYPE POINTS START STOP'.")
                 
-            self.analyses[".ac"] = {
+            self.analyses[".AC"] = {
                 "type": tokens[1].upper(), 
                 "num_points": int(tokens[2]), 
                 "start": self._parse_value(tokens[3]), 
@@ -96,7 +96,17 @@ class NetlistParser:
             }
             
         elif cmd in [".OP", ".DC"]:
-            self.analyses[".OP"] = {}
+            # Default frequency is 0.0 (Standard DC OP)
+            freq = 0.0 
+            
+            # If the user typed something after .OP (e.g., .OP 1k), parse it!
+            if len(tokens) > 1:
+                try:
+                    freq = self._parse_value(tokens[1])
+                except Exception:
+                    self._throw_error(f"Invalid frequency argument for .OP: '{tokens[1]}'")
+                    
+            self.analyses[".OP"] = {"freq": freq}
 
     def _parse_component(self, tokens):
         """Routes component parsing via the registry."""

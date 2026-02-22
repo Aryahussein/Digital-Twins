@@ -1,188 +1,222 @@
 import numpy as np
-from sources import evaluate_all_time_sources
+from sources import evaluate_all_time_sources, build_ac_sources
 from solver import solve_nonlinear_circuit, solve_linear_circuit
-from assembleYmatrix import stamp_dynamic_components, stamp_transient_components
+from assembleYmatrix import initialize_stamps, stamp_source_components, stamp_mna_connections, stamp_dynamic_components, stamp_transient_components, stamp_nonlinear_components, stamp_static_components
 from sensitivity import compute_step_sensitivities
 from tools import print_solution
 
-
-def _apply_ac_sources(sources, components, node_map):
-    """
-    Replace DC source values with AC magnitudes in the source vector.
-    For AC analysis, the excitation should come from the 'ac' field, not 'value' (DC).
-    """
-    ac_sources = sources.copy().astype(complex)
-    for name, comp in components.items():
-        type_char = name[0].upper()
-        ac_mag = comp.get("ac", 0.0)
-
-        if type_char == 'V' and ac_mag != 0.0:
-            idx = node_map[name]  # MNA branch variable index
-            ac_sources[idx] = ac_mag
-        elif type_char == 'I' and ac_mag != 0.0:
-            n1, n2 = comp.get("n1", 0), comp.get("n2", 0)
-            i = node_map.get(n1)
-            j = node_map.get(n2)
-            # Undo DC stamp and apply AC magnitude
-            dc_val = comp.get("value", 0.0)
-            if i is not None:
-                ac_sources[i] += dc_val  # undo the -I stamp
-                ac_sources[i] -= ac_mag  # apply AC magnitude
-            if j is not None:
-                ac_sources[j] -= dc_val  # undo the +I stamp
-                ac_sources[j] += ac_mag  # apply AC magnitude
-
-    return ac_sources
-
-
-def run_op(Y, sources, components, node_map, output_nodes=None, sensitivity=False, nonlinear=False, w=0):
-    """
-    Run DC Operating Point analysis.
-    
-    Returns:
-        VI: solution vector (node voltages and branch currents)
-        lu: LU factorization object
-        sensitivities: sensitivity dict or None
-    """
-    stamp_dynamic_components(Y, sources, components, node_map, w=w)
-
-    if nonlinear and w == 0:
-        V_guess = np.zeros_like(sources)
-        lu, VI = solve_nonlinear_circuit(Y, sources, components, node_map, V_guess,
-                                         max_iter=100, tol=1e-9, num_steps=3)
-    elif not nonlinear:
-        lu, VI = solve_linear_circuit(Y, sources)
-    else:
-        raise ValueError("Only linear AC analysis is supported")
-
-    print_solution(VI, node_map, w=0.0)
-
-    sensitivities = None
-    if sensitivity:
-        sensitivities = compute_step_sensitivities(lu, VI, components, node_map, output_nodes, w=0)
-
-    return VI, lu, sensitivities
-
-
-def run_ac_sweep(Y_base, sources_base, components, node_map,
-                 start_freq=10, stop_freq=100000, points=100,
-                 output_nodes=None, keep_lus=False, sensitivity=False):
-    """
-    Run AC small-signal frequency sweep.
-    
-    Returns:
-        frequencies: array of frequency points (Hz)
-        VIs: 2D array (num_freq x num_unknowns) of complex phasors
-        list_of_lus: list of LU objects (if keep_lus=True)
-        sensitivities: list of per-step sensitivity dicts (if sensitivity=True)
-    """
-    frequencies = np.logspace(np.log10(start_freq), np.log10(stop_freq), points)
-
-    list_of_sensitivities_per_freq_step = [] if sensitivity else None
-    list_of_lus = [] if keep_lus else None
-    VIs = []
-
-    # Apply AC source magnitudes instead of DC values
-    ac_sources = _apply_ac_sources(sources_base, components, node_map)
-
-    for f in frequencies:
-        w = 2 * np.pi * f
-
-        # Fresh copy of base matrices for this frequency step
-        Y_step = Y_base.astype(complex)
-        sources_step = ac_sources.copy()
-
-        # Stamp dynamic components (L and C) at this frequency
-        Y, sources = stamp_dynamic_components(Y_step, sources_step, components, node_map, w=w)
-
-        # Solve
-        lu, VI = solve_linear_circuit(Y, sources)
-        VIs.append(VI)
-
-        if keep_lus:
-            list_of_lus.append(lu)
-
-        if sensitivity:
-            step_sens = compute_step_sensitivities(
-                lu, VI, components, node_map,
-                output_nodes=output_nodes, w=w
-            )
-            list_of_sensitivities_per_freq_step.append(step_sens)
-
-    VIs = np.array(VIs)
-    return frequencies, VIs, list_of_lus, list_of_sensitivities_per_freq_step
-
-
-def transient_analysis_loop(Y_base, sources_base, components, node_map,
-                            t_stop, dt, output_nodes=None, nonlinear=False,
-                            sensitivity=False, keep_lus=False):
-    """
-    Perform transient analysis using Backward Euler integration.
-
-    Parameters:
-        Y_base      : Base admittance matrix (contains only static R, G stamps)
-        sources_base: Base source vector (zeros for transient; sources stamped per step)
-        components  : Parsed netlist dictionary (with original source definitions)
-        node_map    : Variable-to-index mapping
-        t_stop      : End time (seconds)
-        dt          : Time step (seconds)
-        output_nodes: List of nodes for sensitivity computation
-        nonlinear   : Whether circuit contains nonlinear elements
-        sensitivity : Whether to compute adjoint sensitivity per step
-        keep_lus    : Whether to store LU factorizations
+class Simulator:
+    def __init__(self, components, analyses, node_map, output_nodes=None):
+        self.components = components
+        self.analyses = analyses
+        self.node_map = node_map
+        self.output_nodes = output_nodes
+        self.total_dim = len(node_map)
         
-    Returns:
-        time: array of time points
-        results: 2D array (num_steps x num_unknowns)
-        list_of_lus: list of LU objects or None
-        sensitivities: list of per-step sensitivity dicts or None
-    """
-    num_steps = int(t_stop / dt)
-    num_nodes = len(node_map)
+        # Centralized nonlinearity check using strict comp["type"]
+        self.is_nonlinear = any(comp["type"] in ['D', 'M'] for comp in components.values())
+        
+        # Automatic matrix type determination
+        self.is_complex = self._check_if_complex_needed()
+        print(f"Matrix type: {'Complex' if self.is_complex else 'Real'}")
 
-    # Time array matches the actual loop computation: t = step * dt
-    time = np.array([step * dt for step in range(num_steps)])
-    results = np.zeros((num_steps, num_nodes))
+        # Initialize Base Matrices
+        self.Y_base, self.sources_base = initialize_stamps(self.total_dim, is_complex=self.is_complex)
+        
+        # 2. Make MNA Connections (Topology only)
+        stamp_mna_connections(self.Y_base, self.components, self.node_map)
+        
+        # 3. Stamp Static Components (R, G)
+        stamp_static_components(self.Y_base, self.sources_base, self.components, self.node_map)
 
-    # Initial condition (all zeros unless otherwise specified)
-    v_prev = np.zeros(num_nodes)
+        # 4. Finalize
+        self.Y_base = self.Y_base.tocsc()
 
-    list_of_lus = [] if keep_lus else None
-    list_of_sensitivities_per_time_step = [] if sensitivity else None
+    def _check_if_complex_needed(self):
+        """Internal check to see if we need complex numbers for AC."""
+        if any(k in self.analyses for k in [".AC", ".ac"]):
+            return True
+        if ".OP" in self.analyses and self.analyses[".OP"].get("freq", 0.0) > 0.0:
+            return True
+        return False
 
-    for step in range(num_steps):
-        t = step * dt
+    def _get_dc_bias(self, evaluated_components=None):
+        """
+        Calculates the steady-state DC operating point of the circuit.
+        
+        Treats all capacitors as open circuits and inductors as short circuits.
+        If the circuit is non-linear, it initiates the Newton-Raphson solver.
 
-        # Evaluate time-dependent sources at current time
-        comp_t = evaluate_all_time_sources(components, t)
+        Args:
+            evaluated_components (dict, optional): Overrides self.components with 
+                components evaluated at a specific time/state (e.g., t=0).
 
-        # Fresh copy of base matrix (only has R, G; no sources)
-        Y_step = Y_base.copy()
-        sources_step = sources_base.copy()
+        Returns:
+            tuple: (lu_factorization, voltage_current_solution_vector)
+        """
+        # If an evaluated dictionary is passed in, use it. Otherwise, use the master blueprint.
+        comps = evaluated_components if evaluated_components is not None else self.components
 
-        # Stamp sources (with current time values) and BE companion models
-        Y_step, sources_step = stamp_transient_components(
-            Y_step, sources_step, comp_t, node_map, dt, v_prev
-        )
-
-        # Solve system
-        if nonlinear:
-            lu, VI = solve_nonlinear_circuit(
-                Y_step, sources_step, comp_t, node_map, v_prev,
-                max_iter=100, tol=1e-9, num_steps=1
+        print(comps)
+        
+        Y_dc = self.Y_base.copy()
+        sources_dc = self.sources_base.copy()
+        
+        stamp_source_components(Y_dc, sources_dc, comps, self.node_map)
+        stamp_dynamic_components(Y_dc, sources_dc, comps, self.node_map, w=0.0)
+        
+        if self.is_nonlinear:
+            print(Y_dc)
+            print(sources_dc)
+            return solve_nonlinear_circuit(
+                Y_dc, sources_dc, comps, self.node_map, 
+                np.zeros_like(sources_dc), max_iter=100
             )
-        else:
-            lu, VI = solve_linear_circuit(Y_step, sources_step)
+        return solve_linear_circuit(Y_dc, sources_dc)
 
-        if keep_lus:
-            list_of_lus.append(lu)
+    def _solve_single_ac_point(self, w, VI_dc, ac_sources):
+        """Solves one AC frequency."""
+        Y_ac = self.Y_base.astype(complex)
+        sources_step = ac_sources.copy()
+        
+        stamp_dynamic_components(Y_ac, sources_step, self.components, self.node_map, w=w)
+        
+        if self.is_nonlinear:
+            dummy_dc = np.zeros_like(sources_step)
+            stamp_nonlinear_components(Y_ac, dummy_dc, self.components, self.node_map, 
+                                       v_prev=VI_dc, v_guess=VI_dc)
+            
+        return solve_linear_circuit(Y_ac, sources_step)
 
-        if sensitivity:
-            step_sens = compute_step_sensitivities(lu, VI, components, node_map, output_nodes, dt=dt)
-            list_of_sensitivities_per_time_step.append(step_sens)
+    def _solve_single_time_step(self, comp_t, dt, v_prev):
+        """Solves one Transient time step."""
+        Y_step = self.Y_base.copy()
+        sources_step = self.sources_base.copy()
+        
+        stamp_transient_components(Y_step, sources_step, comp_t, self.node_map, dt, v_prev)
+        
+        if self.is_nonlinear:
+            return solve_nonlinear_circuit(Y_step, sources_step, comp_t, self.node_map, 
+                                           v_prev, max_iter=100, num_steps=1)
+        return solve_linear_circuit(Y_step, sources_step)
 
-        # Store results and advance state
-        results[step, :] = VI
-        v_prev = VI.copy()
+    # =========================================================================
+    # PUBLIC ANALYSIS METHODS
+    # =========================================================================
+    def run_op(self, w=0.0, output_nodes=None, sensitivity=False):
+        """
+        Executes a DC Operating Point analysis or single-point AC analysis.
 
-    return time, results, list_of_lus, list_of_sensitivities_per_time_step
+        Args:
+            w (float, optional): Angular frequency. Defaults to 0.0 (DC).
+            output_nodes (list, optional): Nodes to calculate sensitivities for.
+            sensitivity (bool, optional): If True, computes adjoint sensitivities.
+
+        Returns:
+            tuple: (solution_vector, lu_factorization, sensitivities_dict)
+        """
+        lu, VI = self._get_dc_bias()
+        
+        if w > 0.0:
+            ac_sources = build_ac_sources(self.components, self.node_map)
+            lu, VI = self._solve_single_ac_point(w, VI, ac_sources)
+
+        print_solution(VI, self.node_map, w=w)
+        
+        sensitivities = compute_step_sensitivities(lu, VI, self.components, self.node_map, output_nodes, w=w) if sensitivity else None
+        return VI, lu, sensitivities
+
+    def run_ac_sweep(self, start_freq=10, stop_freq=100000, points=100, output_nodes=None, keep_lus=False, sensitivity=False):
+        """
+        Executes an AC small-signal frequency sweep.
+        
+        Automatically calculates the DC bias point first to linearize active components.
+
+        Args:
+            start_freq (float): Starting frequency in Hz.
+            stop_freq (float): Stopping frequency in Hz.
+            points (int): Number of logarithmically spaced points.
+            output_nodes (list, optional): Nodes for sensitivity computation.
+            keep_lus (bool, optional): If True, retains LU objects for post-processing.
+            sensitivity (bool, optional): If True, computes per-step sensitivities.
+
+        Returns:
+            tuple: (frequencies_array, solutions_2d_array, list_of_lus, list_of_sensitivities)
+        """
+        frequencies = np.logspace(np.log10(start_freq), np.log10(stop_freq), points)
+        VIs, list_of_lus, list_of_sensitivities = [], ([] if keep_lus else None), ([] if sensitivity else None)
+        
+        ac_sources = build_ac_sources(self.components, self.node_map)
+        _, VI_dc = self._get_dc_bias()
+
+        for f in frequencies:
+            w = 2 * np.pi * f
+            lu_ac, VI_ac = self._solve_single_ac_point(w, VI_dc, ac_sources)
+            
+            VIs.append(VI_ac)
+            if keep_lus: list_of_lus.append(lu_ac)
+            if sensitivity:
+                list_of_sensitivities.append(compute_step_sensitivities(lu_ac, VI_ac, self.components, self.node_map, output_nodes, w=w))
+
+        return frequencies, np.array(VIs), list_of_lus, list_of_sensitivities
+
+    def run_transient(self, t_stop, dt, output_nodes=None, keep_lus=False, sensitivity=False):
+        """
+        Executes a time-domain transient simulation using Backward Euler integration.
+        
+        Automatically calculates initial conditions at t=0 before starting the time loop.
+
+        Args:
+            t_stop (float): Total simulation time in seconds.
+            dt (float): Integration time step in seconds.
+            output_nodes (list, optional): Nodes for sensitivity computation.
+            keep_lus (bool, optional): If True, retains LU objects per time step.
+            sensitivity (bool, optional): If True, computes per-step sensitivities.
+
+        Returns:
+            tuple: (time_array, solutions_2d_array, list_of_lus, list_of_sensitivities)
+        """
+        time_array = np.arange(0, t_stop, dt)
+        results = np.zeros((len(time_array), self.total_dim))
+        list_of_lus, list_of_sensitivities = ([] if keep_lus else None), ([] if sensitivity else None)
+
+        # Calculate True Initial Conditions
+        comp_t0 = evaluate_all_time_sources(self.components, 0.0)
+        _, v_prev = self._get_dc_bias(evaluated_components=comp_t0)
+
+        print(f"Initial Conditions: {v_prev}")
+        
+        for step, t in enumerate(time_array):
+            comp_t = evaluate_all_time_sources(self.components, t)
+            lu, VI = self._solve_single_time_step(comp_t, dt, v_prev)
+
+            results[step, :] = VI
+            v_prev = VI 
+
+            if keep_lus: list_of_lus.append(lu)
+            if sensitivity: list_of_sensitivities.append(compute_step_sensitivities(lu, VI, self.components, self.node_map, output_nodes, dt=dt))
+
+        return time_array, results, list_of_lus, list_of_sensitivities
+
+    def execute_analysis(self, sensitivity=False, keep_lus=False):
+        """
+        The Master Router. Decides which simulation loop to run 
+        based on the parsed netlist commands.
+        """
+        if ".TRAN" in self.analyses:
+            print("Running transient analysis...")
+            t_stop, dt = self.analyses[".TRAN"]["stop"], self.analyses[".TRAN"]["step"]
+            return self.run_transient(t_stop, dt, self.output_nodes, keep_lus, sensitivity)
+
+        elif ".AC" in self.analyses:
+            print("Running AC analysis...")
+            a = self.analyses[".AC"]
+            return self.run_ac_sweep(a["start"], a["stop"], a["num_points"], self.output_nodes, keep_lus, sensitivity)
+
+        else: # Default to .OP
+            print("Running OP analysis...")
+            freq = self.analyses.get(".OP", {}).get("freq", 0.0)
+            w = freq * 2 * np.pi
+            # run_op returns (VI, lu, sens); we pad with x_axis=None to match sweep returns
+            VI, lu, sens = self.run_op(w=w, output_nodes=self.output_nodes, sensitivity=sensitivity)
+            return None, VI, lu, sens

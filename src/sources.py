@@ -1,6 +1,29 @@
 import numpy as np
 import copy
 
+def build_ac_sources(components, node_map):
+    """
+    Builds a pristine source vector containing ONLY complex AC phasors.
+    """
+    ac_sources = np.zeros(len(node_map), dtype=complex)
+    
+    for name, comp in components.items():
+        type_char = comp["type"]  # Strict lookup: no defaults allowed!
+        
+        if type_char in ['V', 'I'] and comp.get("ac_mag", 0.0) != 0.0:
+            phasor = comp["ac_mag"] * np.exp(1j * np.radians(comp.get("ac_phase", 0.0)))
+            
+            if type_char == 'V':
+                idx = node_map[name]  # The branch equation index for this voltage source
+                ac_sources[idx] += phasor
+            elif type_char == 'I':
+                i = node_map.get(comp["n1"])
+                j = node_map.get(comp["n2"])
+                if i is not None: ac_sources[i] -= phasor
+                if j is not None: ac_sources[j] += phasor
+                
+    return ac_sources
+
 def evaluate_time_source(source_dict, t):
     """Evaluate a single time-dependent source at time t."""
     stype = source_dict["type"]
