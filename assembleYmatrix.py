@@ -223,8 +223,10 @@ def stamp_nmos(Y, sources, n1, n2, n3, value, p_V_guess, V_guess, node_map):
     Bn = unCox*W_over_L     # Hard-coded placeholder
     Vth = 0.4               # Hard-coded placeholder
 
-
-    idx1, idx2, idx3 = get_idx(n1, node_map), get_idx(n2, node_map), get_idx(n3, node_map)         # get index of nodes 1,2,3
+    if (value == "NMOS"):
+        idx1, idx2, idx3 = get_idx(n1, node_map), get_idx(n2, node_map), get_idx(n3, node_map)         # get index of nodes 1,2,3 (D,G,S)
+    else:
+        raise RuntimeError(f"Unrecognized value {value}")
 
     # Find voltages of Vgs and Vds for the new guess
     v1 = V_guess[idx1] if idx1 is not None else 0
@@ -250,17 +252,15 @@ def stamp_nmos(Y, sources, n1, n2, n3, value, p_V_guess, V_guess, node_map):
     p_region = nmos_region(p_vgs_k, p_vds_k, Vth)
     print(f"    Previous nMOS region={p_region} for vgs={p_vgs_k}, vds={p_vds_k}, vth={Vth}")
 
-    region
-
     # Region has not changed
     if (region == p_region):
         print(f"    region unchanged from {region}")
         if (region == 0):
-            Id = 0
+            Id = 0                                                  # Id for Off state
         elif (region == 1):
-            Id = Bn*((vgs_k-Vth)*vds_k-(vds_k**2)/2) + 1e-6
+            Id = Bn*((vgs_k-Vth)*vds_k-(vds_k**2)/2) + 1e-6         # Id for Triode state
         elif (region == 2):
-            Id = Bn*((vgs_k-Vth)**2) + 1e-6
+            Id = Bn*((vgs_k-Vth)**2) + 1e-6                         # Id for Saturation state
         else:
             print(f"    Error: nMOS {region} region operation not supported")
 
@@ -268,69 +268,24 @@ def stamp_nmos(Y, sources, n1, n2, n3, value, p_V_guess, V_guess, node_map):
     else:
         print(f"    region changed from {p_region} to {region}")
         if (p_region == 0):                                                 # Transitioning from Off->Triode
-            Id = Bn*((Vth-Vth)*vds_k-(vds_k**2)/2)                           # Find Id with Vgs=Vth and current_Vds
+            Id = Bn*((Vth-Vth)*vds_k-(vds_k**2)/2)                          # Find Id with Vgs=Vth and current_Vds
         
         elif (p_region == 1):                                               # Transitioning from Triode to Off/Saturation
 
             if (region == 0):                                               # Transitioning from Triode->Off
-                Id = Bn*((Vth-Vth)*vds_k-(vds_k**2)/2) + 1e-6               # Find Id with Vgs=Vth and current_Vds
+                Id = Bn*((Vth-Vth)*vds_k-(vds_k**2)/2)                      # Find Id with Vgs=Vth and current_Vds
             
             elif (region == 2):                                             # Transitioning from Triode->Saturation
-                Id = Bn*((Vth-Vth)*(vgs_k-Vth)-((vgs_k-Vth)**2)/2) + 1e-6   # Find Id with Vds=Vgs-Vth and Vgs=Vth      ***Should Vgs=Vth be used here***
+                Id = Bn*((Vth-Vth)*(vgs_k-Vth)-((vgs_k-Vth)**2)/2)          # Find Id with Vds=Vgs-Vth and Vgs=Vth      ***Should Vgs=Vth be used here***
 
         elif (p_region == 2):
-            Id = Bn*((vgs_k-Vth)*(vgs_k-Vth)-((vgs_k-Vth)**2)/2) + 1e-6     # Find Id with Vds=Vgs-Vth and Vgs=Vth      ***Should Vgs=Vth be used here***
+            Id = Bn*((vgs_k-Vth)*(vgs_k-Vth)-((vgs_k-Vth)**2)/2)            # Find Id with Vds=Vgs-Vth and Vgs=Vth      ***Should Vgs=Vth be used here***
 
     print(f"    Id = {Id}")
 
     if idx1 is not None: sources[idx1] -= Id
     if idx3 is not None: sources[idx3] += Id
 
-    
-
-    # limit the amount v can jump at a time & prevent overflows
-
-    #n_vgs_k =                                 ### Note: currently, gate is floating; vgs is unused so it is not limited
-
-    # Saturation when Vds > Vgs - Vth
-
-    
-    # Four potential scenarios:
-    # 1. If we are in triode going into saturation
-    #       - limit Vds to the boundary
-    # 2. If we are in saturation going into triode
-    #       - limit Vds to the boundary
-    # 3. If we are in saturation staying in saturation, no change
-    # 4. If we are in triode staying in triode, no change 
-
-
-
-    '''
-    # limit the amount v can jump at a time & prevent overflows
-    n_vd_k = pnjlim(vd_k, p_vd_k, 1)
-
-    # 1. Calculate linearization components
-    exp_term = np.exp(n_vd_k / Vt)
-    id_k = Is * (exp_term - 1)
-
-    # gd = dI/dV = linear conductance
-    gd = (Is / Vt) * exp_term
-    
-    # linearized companion model
-    ieq = id_k - gd * n_vd_k
-    
-    # 2. Stamp gd into Y (like a resistor)
-    if idx1 is not None:
-        Y[idx1, idx1] += gd
-        if idx2 is not None:
-            Y[idx1, idx2] -= gd
-            Y[idx2, idx1] -= gd
-    if idx2 is not None:
-        Y[idx2, idx2] += gd
-        
-    # 3. Stamp Ieq into RHS vector
-    if idx1 is not None: sources[idx1] -= ieq
-    if idx2 is not None: sources[idx2] += ieq'''
 
 def update_nonlinear_stamps(Y_ori, sources_ori, components, node_map, prev_V_guess, V_guess):
     """

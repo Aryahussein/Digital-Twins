@@ -29,7 +29,7 @@ def solve_adjoint(lu, target, var_map, total_dim):
     d[idx] = 1.0
     return lu.solve(d, trans='T')
 
-def solve_nonlinear_circuit(Y_ori, sources_ori, components, node_map, total_dim, V_ini, max_iter=1000, tol=1e-6, num_steps=10):
+def solve_nonlinear_circuit(Y_ori, sources_ori, components, node_map, total_dim, V_ini, max_iter=100, tol=1e-6, num_steps=10):
     # Source Ramping: k goes from 0.1 to 1.0
     ramp = np.linspace(1.0/num_steps, 1.0, num_steps)
 
