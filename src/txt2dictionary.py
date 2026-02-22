@@ -133,7 +133,10 @@ def parse_netlist(file_path):
         
         if cmd.startswith('.'):
             if cmd == ".MODEL":
+                # print(tokens)
                 mname = tokens[1].upper()
+                # print(mname)
+                # print(tokens[2].upper())
                 rest_of_line = " ".join(tokens[3:]).replace('(', ' ').replace(')', ' ')
                 mparams, _ = parse_params(rest_of_line.split())
                 models[mname] = mparams
@@ -184,8 +187,7 @@ def parse_netlist(file_path):
         elif type_char == 'M':
             n_d, n_g, n_s, n_b = [int(x) for x in tokens[1:5]]
             model_name = tokens[5].upper()
-            params, _ = parse_params(tokens[6:])
-            components[name] = {"type": 'M', "n_d": n_d, "n_g": n_g, "n_s": n_s, "n_b": n_b, "model": model_name, "params": params}
+            components[name] = {"type": 'M', "n_d": n_d, "n_g": n_g, "n_s": n_s, "n_b": n_b, "model": model_name}
             
         # 4. SOURCES (V, I)
         elif type_char in ['V', 'I']:

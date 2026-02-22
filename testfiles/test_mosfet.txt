@@ -1,0 +1,18 @@
+** Voltage Sources **
+V_dd    1 0  DC 5V
+* V_in: PULSE(Vlow Vhigh delay rise fall width period)
+V_gate  2   0  PULSE(0V 3V 1ns 0.1ns 0.1ns 10ns 20ns)
+
+** Circuit Components **
+R_load  1 3  2k
+C_out   3   0  50fF     ; Small parasitic/load capacitance
+
+* M1 Drain Gate Source Bulk Model Width Length
+M1 3 2 0 0 NMOS
+
+.model NMOS NMOS (VTO=0.7 W=10u L=1u mu=0.0001)
+
+** Analysis Command **
+* .tran <step> <stop_time>
+.tran 0.01ns 40ns
+

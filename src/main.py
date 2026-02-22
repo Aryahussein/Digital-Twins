@@ -18,6 +18,7 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
         keep_lus: bool, whether to keep LU matrices (needed for sensitivity post-processing)
     """
     components, analyses = parse_netlist(netlist_path)
+    print(components)
     
     node_map = build_node_index(components)
     comp_t0 = evaluate_all_time_sources(components, 0.0)
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     
     # ==========================================
     # TOGGLE THIS TO SWITCH BETWEEN GUI AND CLI
-    USE_GUI = True 
+    USE_GUI = False
     # ==========================================
 
     if USE_GUI:
@@ -116,12 +117,12 @@ if __name__ == "__main__":
         root.mainloop()
         
     else:
-        netlist = "transient_diode" # Choose your netlist here
+        netlist = "test_mosfet" # Choose your netlist here
 
-        file_path = f"./testfiles/{netlist}.txt"
+        file_path = f"../testfiles/{netlist}.txt"
 
         target_node = None # If None, will do adjoint on all nodes
-        target_node_for_plotting = [1, 2]
+        target_node_for_plotting = [1, 2, 3]
         target_component = "R1" # Needed for plotting
         
         keep_lus = False
@@ -157,14 +158,14 @@ if __name__ == "__main__":
         
         # Visualize
         if ".AC" in analyses:
-            make_bode_plot(x_axis, VI, node_map, target_node_for_plotting, folder="./figures/ac", name=f"{netlist}_bode")
+            make_bode_plot(x_axis, VI, node_map, target_node_for_plotting, folder="../figures/ac", name=f"{netlist}_bode")
             if sens_post_proc or sensitivity:
-                plot_ac_sensitivity(x_axis, VI, sensitivities_list, node_map, target_node_for_plotting, target_component=target_component, folder="./figures/ac", name=f"{netlist}_ac_sens")
+                plot_ac_sensitivity(x_axis, VI, sensitivities_list, node_map, target_node_for_plotting, target_component=target_component, folder="../figures/ac", name=f"{netlist}_ac_sens")
 
         elif ".TRAN" in analyses:
-            plot_transient(x_axis, VI, node_map, target_node_for_plotting, folder="./figures/tran", name=f"{netlist}_tran")
+            plot_transient(x_axis, VI, node_map, target_node_for_plotting, folder="../figures/tran", name=f"{netlist}_tran")
             if sens_post_proc or sensitivity:
-                plot_transient_sensitivity(x_axis, VI, sensitivities_list, node_map, target_node_for_plotting, target_component=target_component, folder="./figures/tran", name=f"{netlist}_tran_sens")
+                plot_transient_sensitivity(x_axis, VI, sensitivities_list, node_map, target_node_for_plotting, target_component=target_component, folder="../figures/tran", name=f"{netlist}_tran_sens")
 
         else:
             if sens_post_proc or sensitivity:
