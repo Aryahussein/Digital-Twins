@@ -1,0 +1,28 @@
+* RS Latch (MOSFET Level)
+* Nodes: 1=S, 2=R, 3=Q, 4=Q_not, 5=VDD, 0=GND
+
+* Power Supply
+VDD 5 0 DC 5V
+
+* Pull-up Resistors (Load)
+R1 5 3 1k
+R2 5 4 1k
+
+* Set/Reset Input Pulses
+VS 1 0 PULSE(0 5 1m 1n 1n 2m 10m)
+VR 2 0 PULSE(0 5 5m 1n 1n 2m 10m)
+
+* Cross-Coupled NMOS (NOR Gate Logic)
+* Gate of M1 is connected to R, Gate of M2 is connected to S
+* But for a latch, we also couple the outputs back to the gates
+M1 3 4 0 0 NMOS W=100u L=1u
+M2 4 3 0 0 NMOS W=100u L=1u
+
+* Input Drivers (The S and R triggers)
+M_SET 4 1 0 0 NMOS W=150u L=1u
+M_RESET 3 2 0 0 NMOS W=150u L=1u
+
+
+.model NMOS NMOS(Vto=1.0 Kp=20u)
+.tran 10u 10m
+.end

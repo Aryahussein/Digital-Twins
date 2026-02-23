@@ -11,10 +11,12 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
     # 1. Parse
     parser = NetlistParser()
     components, analyses = parser.parse(netlist_path)
+    print(components)
     node_map = build_node_index(components)
 
+    ramp = 1
     # 2. Setup Solver (Matrix and Nonlinearity logic is now INSIDE the class)
-    sim = Simulator(components, analyses, node_map, output_nodes)
+    sim = Simulator(components, analyses, node_map, output_nodes, ramp=ramp)
 
     # 3. Solve (The class routes the analysis internally)
     x_axis, VI, list_of_lus, raw_sens = sim.execute_analysis(
@@ -64,18 +66,18 @@ if __name__ == "__main__":
         root.mainloop()
         
     else:
-        netlist = "rc_lowpass" # Choose your netlist here
+        netlist = "RS_latch" # Choose your netlist here
 
         file_path = f"../testfiles/{netlist}.txt"
 
-        target_node = None # If None, will do adjoint on all nodes
-        target_node_for_plotting = [1, 2]
-        target_component = "C1" # Needed for plotting
+        target_node = [2] # If None, will do adjoint on all nodes
+        target_node_for_plotting = None
+        target_component = "D1" # Needed for plotting
         
         keep_lus = False
 
         # Choose how to compute the sensitivity
-        sensitivity = True # Good for when you only need to have the sensitivity at a few output nodes (less memory needed)
+        sensitivity = False # Good for when you only need to have the sensitivity at a few output nodes (less memory needed)
         sens_post_proc = False # Good when you need to have the sensitivity at all output nodes
 
         if sens_post_proc:

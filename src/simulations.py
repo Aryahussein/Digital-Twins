@@ -6,12 +6,13 @@ from sensitivity import compute_step_sensitivities
 from tools import print_solution
 
 class Simulator:
-    def __init__(self, components, analyses, node_map, output_nodes=None):
+    def __init__(self, components, analyses, node_map, output_nodes=None, ramp=1):
         self.components = components
         self.analyses = analyses
         self.node_map = node_map
         self.output_nodes = output_nodes
         self.total_dim = len(node_map)
+        self.ramp = ramp
         
         # Centralized nonlinearity check using strict comp["type"]
         self.is_nonlinear = any(comp["type"] in ['D', 'M'] for comp in components.values())
@@ -64,13 +65,14 @@ class Simulator:
         
         stamp_source_components(Y_dc, sources_dc, comps, self.node_map)
         stamp_dynamic_components(Y_dc, sources_dc, comps, self.node_map, w=0.0)
+
+        print(Y_dc)
+        print(sources_dc)
         
         if self.is_nonlinear:
-            print(Y_dc)
-            print(sources_dc)
             return solve_nonlinear_circuit(
                 Y_dc, sources_dc, comps, self.node_map, 
-                np.zeros_like(sources_dc), max_iter=100
+                np.zeros_like(sources_dc), max_iter=100, num_steps=self.ramp
             )
         return solve_linear_circuit(Y_dc, sources_dc)
 
@@ -97,7 +99,7 @@ class Simulator:
         
         if self.is_nonlinear:
             return solve_nonlinear_circuit(Y_step, sources_step, comp_t, self.node_map, 
-                                           v_prev, max_iter=100, num_steps=1)
+                                           v_prev, max_iter=100, num_steps=self.ramp, print_stuff=False)
         return solve_linear_circuit(Y_step, sources_step)
 
     # =========================================================================
@@ -187,6 +189,7 @@ class Simulator:
         print(f"Initial Conditions: {v_prev}")
         
         for step, t in enumerate(time_array):
+            print(f"Solving at time {t}")
             comp_t = evaluate_all_time_sources(self.components, t)
             lu, VI = self._solve_single_time_step(comp_t, dt, v_prev)
 

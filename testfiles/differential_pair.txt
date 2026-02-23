@@ -1,0 +1,21 @@
+* Discrete MOSFET Differential Comparator
+* Nodes: 1=V_ref, 2=V_in, 3=Out, 4=CommonSource, 5=VDD, 0=GND
+
+VDD 5 0 DC 5V
+V_REF 1 0 DC 2.5V
+V_IN 2 0 SIN(2.5 1 1k)
+
+* Tail Current Source (Biasing the pair)
+I_TAIL 4 0 DC 1mA
+
+* The Differential Pair
+M1 6 1 4 0 NMOS W=100u L=1u
+M2 3 2 4 0 NMOS W=100u L=1u
+
+* Load Resistors
+R1 5 6 2k
+R2 5 3 2k
+
+.model NMOS NMOS(Vto=1.0 Kp=100u)
+.tran 1u 5m
+.end

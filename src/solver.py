@@ -28,7 +28,7 @@ def solve_adjoint(lu, target, node_map):
     d[idx] = 1.0
     return lu.solve(d, trans='T')
 
-def solve_nonlinear_circuit(Y_base, sources_base, components, node_map, V_ini, max_iter=100, tol=1e-6, num_steps=10):
+def solve_nonlinear_circuit(Y_base, sources_base, components, node_map, V_ini, max_iter=100, tol=1e-6, num_steps=10, print_stuff=True):
     """Newton-Raphson solver with source ramping for nonlinear circuits."""
     # Source Ramping: k goes from 1/num_steps to 1.0
     ramp = np.linspace(1.0/num_steps, 1.0, num_steps)
@@ -38,7 +38,8 @@ def solve_nonlinear_circuit(Y_base, sources_base, components, node_map, V_ini, m
     lu = None  # Will be set by solve_linear_circuit in the loop
 
     for k in ramp:
-        print(f"\n--- Ramping Source: {k*100:.1f}% ---")
+        if print_stuff:
+            print(f"\n--- Ramping Source: {k*100:.1f}% ---")
         sources_k = sources_base.copy() * k
         Y_k = Y_base.copy()
         
@@ -46,6 +47,8 @@ def solve_nonlinear_circuit(Y_base, sources_base, components, node_map, V_ini, m
             Y_iter, sources_iter = Y_k.copy(), sources_k.copy()
             # 1. Generate linearized Y and I for the current guess V_k
             Y_iter, sources_iter = stamp_nonlinear_components(Y_iter, sources_iter, components, node_map, prev_V_k, V_k)
+            # print(Y_iter)
+            # print(sources_iter)
             
             # 2. Solve the linear system
             lu, V_new = solve_linear_circuit(Y_iter, sources_iter)
@@ -57,9 +60,14 @@ def solve_nonlinear_circuit(Y_base, sources_base, components, node_map, V_ini, m
             
             prev_V_k = V_k.copy()
             V_k = V_new # Update guess for next iteration
-            print(f"Iteration: {i}, error = {max_error}")
+
+            # FIX: ADD DAMPING TO THE NEWTON-RAPHSON SOLVER and some more fine control of the ramp and damping via nettlist parameters
+            # alpha = 0.5  # Only take 50% of the calculated step
+            # V_k = V_k + alpha * (V_new - V_k)
+
+            if print_stuff: print(f"Iteration: {i}, error = {max_error}")
             if max_error < tol:
-                print(f"Converged in {i+1} iterations.")
+                if print_stuff: print(f"Converged in {i+1} iterations.")
                 break
         else:
             raise RuntimeError(f"Newton-Raphson failed to converge at {k*100}% ramp.")

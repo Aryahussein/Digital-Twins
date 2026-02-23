@@ -362,13 +362,21 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
     VTO = params["VTO"]       # Zero-bias threshold voltage
     W = inst_params["W"]             # width
     L = inst_params["L"]             # Length
-    mu = params["MU"]           # mobility
+
+
+    if "KP" in params:
+        KP = params["KP"]           # Gain Parameter = mu * C_ox
+    elif "MU" in params:
+        KP = params["MU"] * params["C_ox"]
+    else:
+        raise ValueError("No KP or (MU and C_ox) specified for NMOS!")
+
     # LAMBDA = params["LAMBDA"] # Channel length modulation
     # GAMMA = params.get("GAMMA", 0.0)   # Body effect parameter
     # PHI = params.get("PHI", 0.6)       # Surface potential
     # IS = params.get("IS", 1e-14)       # Body diode saturation current
 
-    Bn =  W/L * mu
+    Bn =  W/L * KP 
     
     if (m_type == "NMOS"):
         idx_d, idx_g, idx_s, idx_b = get_idx(n_d, node_map), get_idx(n_g, node_map), get_idx(n_s, node_map), get_idx(n_b, node_map)
@@ -395,45 +403,85 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
 
     # Find the operating region for current and previous 
     region = nmos_region(vgs_k, vds_k, VTO)
-    print(f"    Current nMOS region={region} for vgs={vgs_k}, vds={vds_k}, vth={VTO}")
+    # print(f"    Current nMOS region={region} for vgs={vgs_k}, vds={vds_k}, vth={VTO}")
     p_region = nmos_region(p_vgs_k, p_vds_k, VTO)
-    print(f"    Previous nMOS region={p_region} for vgs={p_vgs_k}, vds={p_vds_k}, vth={VTO}")
+    # print(f"    Previous nMOS region={p_region} for vgs={p_vgs_k}, vds={p_vds_k}, vth={VTO}")
 
     # Region has not changed
+    # if (region == p_region):
+    #     print(f"    region unchanged from {region}")
+    #     if (region == 0):
+    #         Id = 0                                                  # Id for Off state
+    #     elif (region == 1):
+    #         Id = Bn*((vgs_k-VTO)*vds_k-(vds_k**2)/2) + 1e-6         # Id for Triode state
+    #     elif (region == 2):
+    #         Id = Bn*((vgs_k-VTO)**2) + 1e-6                         # Id for Saturation state
+    #     else:
+    #         raise ValueError(f"    Error: nMOS {region} region operation not supported")
+    #
+    # # Region changed; set Id to the edge of the old/new regions
+    # else:
+    #     print(f"    region changed from {p_region} to {region}")
+    #     if (p_region == 0):                                                 # Transitioning from Off->Triode
+    #         Id = Bn*((VTO-VTO)*vds_k-(vds_k**2)/2)                          # Find Id with Vgs=VTO and current_Vds
+    #     
+    #     elif (p_region == 1):                                               # Transitioning from Triode to Off/Saturation
+    #
+    #         if (region == 0):                                               # Transitioning from Triode->Off
+    #             Id = Bn*((VTO-VTO)*vds_k-(vds_k**2)/2)                      # Find Id with Vgs=VTO and current_Vds
+    #         
+    #         elif (region == 2):                                             # Transitioning from Triode->Saturation
+    #             Id = Bn*((VTO-VTO)*(vgs_k-VTO)-((vgs_k-VTO)**2)/2)          # Find Id with Vds=Vgs-VTO and Vgs=VTO      ***Should Vgs=VTO be used here***
+    #
+    #     elif (p_region == 2):
+    #         Id = Bn*((vgs_k-VTO)*(vgs_k-VTO)-((vgs_k-VTO)**2)/2)            # Find Id with Vds=Vgs-VTO and Vgs=VTO      ***Should Vgs=VTO be used here***
+    #     else:
+    #         raise ValueError(f"    Error: pMOS {region} region operation not supported")
+    #
+    # print(f"    Id = {Id}")
+
+    # Initialize linearized parameters
+    gm = 0.0
+    gds = 1e-12  # Your "Physical Bridge" to prevent singular matrices
+    Id = 0.0
+
     if (region == p_region):
-        print(f"    region unchanged from {region}")
-        if (region == 0):
-            Id = 0                                                  # Id for Off state
-        elif (region == 1):
-            Id = Bn*((vgs_k-VTO)*vds_k-(vds_k**2)/2) + 1e-6         # Id for Triode state
-        elif (region == 2):
-            Id = Bn*((vgs_k-VTO)**2) + 1e-6                         # Id for Saturation state
-        else:
-            raise ValueError(f"    Error: nMOS {region} region operation not supported")
+        if (region == 0): # OFF
+            Id = 0
+            gm = 0
+            gds = 1e-12 
+        elif (region == 1): # TRIODE (Linear)
+            Id = Bn * ((vgs_k - VTO) * vds_k - (vds_k**2) / 2)
+            gm = Bn * vds_k                        # dId/dVgs
+            gds = Bn * (vgs_k - VTO - vds_k) + 1e-12 # dId/dVds
+        elif (region == 2): # SATURATION
+            Id = 0.5 * Bn * ((vgs_k - VTO)**2)
+            gm = Bn * (vgs_k - VTO)                # dId/dVgs
+            gds = 1e-12
 
-    # Region changed; set Id to the edge of the old/new regions
-    else:
-        print(f"    region changed from {p_region} to {region}")
-        if (p_region == 0):                                                 # Transitioning from Off->Triode
-            Id = Bn*((VTO-VTO)*vds_k-(vds_k**2)/2)                          # Find Id with Vgs=VTO and current_Vds
-        
-        elif (p_region == 1):                                               # Transitioning from Triode to Off/Saturation
+    # if idx_d is not None: sources[idx_d] -= Id
+    # if idx_s is not None: sources[idx_s] += Id
 
-            if (region == 0):                                               # Transitioning from Triode->Off
-                Id = Bn*((VTO-VTO)*vds_k-(vds_k**2)/2)                      # Find Id with Vgs=VTO and current_Vds
-            
-            elif (region == 2):                                             # Transitioning from Triode->Saturation
-                Id = Bn*((VTO-VTO)*(vgs_k-VTO)-((vgs_k-VTO)**2)/2)          # Find Id with Vds=Vgs-VTO and Vgs=VTO      ***Should Vgs=VTO be used here***
+    # 1. Stamp Transconductance (Current at Drain/Source controlled by Gate)
+    if idx_d is not None:
+        if idx_g is not None: Y[idx_d, idx_g] += gm
+        if idx_s is not None: Y[idx_d, idx_s] -= gm
+    if idx_s is not None:
+        if idx_g is not None: Y[idx_s, idx_g] -= gm
+        if idx_s is not None: Y[idx_s, idx_s] += gm
 
-        elif (p_region == 2):
-            Id = Bn*((vgs_k-VTO)*(vgs_k-VTO)-((vgs_k-VTO)**2)/2)            # Find Id with Vds=Vgs-VTO and Vgs=VTO      ***Should Vgs=VTO be used here***
-        else:
-            raise ValueError(f"    Error: pMOS {region} region operation not supported")
+    # 2. Stamp Output Conductance (The "physical" path between Drain and Source)
+    if idx_d is not None:
+        Y[idx_d, idx_d] += gds
+        if idx_s is not None:
+            Y[idx_d, idx_s] -= gds
+            Y[idx_s, idx_d] -= gds
+            Y[idx_s, idx_s] += gds
 
-    print(f"    Id = {Id}")
-
-    if idx_d is not None: sources[idx_d] -= Id
-    if idx_s is not None: sources[idx_s] += Id
+    # 3. Stamp the Equivalent Current Source
+    Ieq = Id - (gm * vgs_k) - (gds * vds_k)
+    if idx_d is not None: sources[idx_d] -= Ieq
+    if idx_s is not None: sources[idx_s] += Ieq
 
 # def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
 #     """

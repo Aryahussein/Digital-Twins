@@ -88,6 +88,9 @@ def plot_transient(time, VI, node_map, output_node, folder="./figures/tran", nam
     print(f"Plotting transient response for output node {output_node}...")
     
     fig, ax = plt.subplots(figsize=(6, 3))
+
+    if output_node is None:
+        output_node = list(node_map.keys())
     
     for node in output_node:
         node_idx = node_map[node]
@@ -96,7 +99,7 @@ def plot_transient(time, VI, node_map, output_node, folder="./figures/tran", nam
 
     ax.set_ylabel(f"Voltage (V)")
     ax.set_xlabel("Time (s)")
-    ax.legend()
+    ax.legend(fontsize=8, bbox_to_anchor=(1, 1))
     ax.set_title(f"Transient Response: Node {output_node}")
     ax.grid(True, ls="--", alpha=0.6)
     

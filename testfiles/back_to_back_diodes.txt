@@ -1,0 +1,16 @@
+* Back-to-Back (Antiseries) Diodes
+* Nodes: 1=Input, 2=Midpoint, 0=GND
+
+* AC Input Source
+V1 1 0 SIN(0 10 60) ; 10V Peak, 60Hz Sine wave
+
+* Diode 1 (Forward biased relative to Node 1)
+D1 1 2 DMOD
+
+* Diode 2 (Reverse biased relative to Node 1)
+D2 0 2 DMOD
+
+* Diode Model (Standard 1N4148 style)
+.model DMOD D(Is=1n Rs=1.5 Bv=75)
+
+.tran 0.1m 50m

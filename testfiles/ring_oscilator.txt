@@ -1,0 +1,21 @@
+* 3-Stage NMOS Ring Oscillator
+VDD 5 0 PULSE(0 5 1n 1n 1n 10m 20m)
+
+* Stage 1 Inverter + Load Cap
+R1 5 1 5k
+M1 1 3 0 0 NMOS W=100u L=1u
+C1 1 0 10pF
+
+* Stage 2 Inverter + Load Cap
+R2 5 2 5k
+M2 2 1 0 0 NMOS W=100u L=1u
+C2 2 0 10pF
+
+* Stage 3 Inverter + Load Cap
+R3 5 3 5k
+M3 3 2 0 0 NMOS W=100u L=1u
+C3 3 0 10pF
+
+.model NMOS NMOS(Vto=1.0 Kp=20u)
+.tran 1u 1m
+.end

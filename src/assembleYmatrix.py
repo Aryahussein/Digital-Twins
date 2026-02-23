@@ -62,7 +62,10 @@ def stamp_static_components(Y, sources, components, node_map):
     for name, comp in components.items():
         type_char = comp["type"]
         if type_char in STATIC_DISPATCH:
+            print(f"stamping {name} with {type_char}")
             STATIC_DISPATCH[type_char](Y, sources, comp, node_map, name)
+
+    print(Y)
 
     return Y.tocsc(), sources
 

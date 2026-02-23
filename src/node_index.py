@@ -11,7 +11,7 @@ def build_node_index(components):
     """
     nodes = set()
     for comp in components.values():
-        for key in ["n1", "n2", "n3", "n4"]:
+        for key in ["n1", "n2", "n3", "n4", 'n_d', 'n_g', 'n_s']:
             val = comp.get(key, 0)
             if val != 0:
                 nodes.add(val)
@@ -30,6 +30,8 @@ def build_node_index(components):
         if name.startswith(("V", "L")):
             node_map[name] = current_idx
             current_idx += 1
+
+    print(node_map)
             
     return node_map
 

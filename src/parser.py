@@ -67,14 +67,20 @@ class NetlistParser:
         cmd = tokens[0].upper()
         
         if cmd == ".MODEL":
-            if len(tokens) < 3: 
+            clean_line = " ".join(tokens).replace('(', ' ( ').replace(')', ' ) ')
+            new_tokens = clean_line.split()
+
+            if len(new_tokens) < 3: 
                 self._throw_error("Malformed .MODEL command.")
                 
-            mname, mtype = tokens[1].upper(), tokens[2].upper()
-            rest_of_line = " ".join(tokens[3:]).replace('(', ' ').replace(')', ' ')
-            mparams, _ = self._extract_params(rest_of_line.split())
-            self.models[mname] = {"type": mtype, "params": mparams}
+            mname = new_tokens[1].upper()
+            mtype = new_tokens[2].upper()
             
+            rest_of_line = " ".join(new_tokens[3:]).replace('(', '').replace(')', '')
+            mparams, _ = self._extract_params(rest_of_line.split())
+            
+            self.models[mname] = {"type": mtype, "params": mparams}            
+
         elif cmd == ".TRAN":
             if len(tokens) < 3: 
                 self._throw_error("Expected at least '.TRAN TSTEP TSTOP'.")
