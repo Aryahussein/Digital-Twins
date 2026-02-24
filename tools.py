@@ -7,6 +7,7 @@ from node_index import build_node_index
 from solver import solve_sparse, solve_LU, get_node_and_branch_currents, solve_adjoint
 from postprocessing import map_voltages
 from assembleYmatrix import generate_stamps
+from constants import Vt
 
 
 def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0):
@@ -60,6 +61,24 @@ def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0):
             # For VCCS, sensitivity = - (PsiPhi_branch_current * VI_sense)
             # In adjoint, this is PsiPhi_branch (voltage at the current source nodes)
             sensitivities[name] = - (PsiPhi_branch * v_sense)
+
+        elif name.startswith("D"):
+            # Nonlinear diode sensitivity (DC only): parameter is the saturation current Is.
+            #
+            # Diode current: Id = Is * (exp(Vd/Vt) - 1)
+            # KCL residual contributes +Id at n1 and -Id at n2.
+            # Adjoint formula: dy/dIs = -lambda^T (dF/dIs)
+            # => dy/dIs = -(lambda1 - lambda2) * (exp(Vd/Vt) - 1)
+            if w != 0.0:
+                continue
+
+            vd = VI_branch  # V(anode) - V(cathode)
+
+            # Prevent overflow in exp for extreme voltages
+            x = np.clip(vd / Vt, -50.0, 50.0)
+            dId_dIs = np.exp(x) - 1.0
+
+            sensitivities[name] = -PsiPhi_branch * dId_dIs
 
     return sensitivities
 
@@ -135,26 +154,53 @@ def run_bode_plot(netlist_file, output_node, start_freq=10, stop_freq=100000, po
     # plt.show()
     fig.savefig(f"./figures/ac/{name}.png", dpi = 600, bbox_inches = "tight" )
 
-def plot_sensitivity_sweep(components, output_node, target_component, start_f=10, end_f=1000, name="sensitiviy"):
+def plot_sensitivity_sweep(components, output, target_component, start_f=10, end_f=1000, name="sensitivity"):
+    """Sweep frequency and plot output magnitude + adjoint sensitivity.
+
+    Parameters
+    ----------
+    output:
+        - int node n -> V(n)
+        - tuple/list (a, b) -> V(a,b) = V(a) - V(b)  (use b=0 for ground)
+    """
+    import os
+
     node_map, total_dim = build_node_index(components)
     freqs = np.logspace(np.log10(start_f), np.log10(end_f), 200)
-    
+
     v_out_mags = []
     sens_mags = []
+
+    # Pretty label for plots
+    if isinstance(output, (tuple, list)) and len(output) == 2:
+        a, b = output
+        out_label = f"V({a},{b})"
+    else:
+        out_label = f"V({output})"
 
     for f in freqs:
         w = 2 * np.pi * f
         Y, sources = generate_stamps(components, node_map, total_dim, w)
-        
+
         lu = solve_LU(Y)
         VI = get_node_and_branch_currents(lu, sources)
-        
-        PsiPhi = solve_adjoint(lu, output_node, node_map, total_dim)
 
-        # 3. Calculate Sensitivity for R1
+        # Adjoint solution for the chosen output definition
+        PsiPhi = solve_adjoint(lu, output, node_map, total_dim)
+
+        # Sensitivities for all components
         s = get_all_sensitivities(components, VI, PsiPhi, node_map, w)
-        
-        v_out_mags.append(np.abs(VI[node_map[output_node]]))
+
+        # Output magnitude
+        if isinstance(output, (tuple, list)) and len(output) == 2:
+            a, b = output
+            va = VI[node_map[a]] if a != 0 else 0.0
+            vb = VI[node_map[b]] if b != 0 else 0.0
+            vout = va - vb
+        else:
+            vout = VI[node_map[output]]
+
+        v_out_mags.append(np.abs(vout))
         sens_mags.append(np.abs(s[target_component]))
 
     v_out_mags = np.array(v_out_mags)
@@ -162,27 +208,25 @@ def plot_sensitivity_sweep(components, output_node, target_component, start_f=10
 
     # Plotting
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 4), sharex=True)
-    
-    mag_db = 20 * np.log10(v_out_mags)
+
+    mag_db = 20 * np.log10(np.maximum(v_out_mags, 1e-30))
     ax1.semilogx(freqs, mag_db, lw=2)
-    # ax1.set_ylabel("Output Magnitude |Vout| (V)")
     ax1.set_ylabel("Magnitude (dB)")
-    # ax1.set_title("Twin-T Notch Filter Response")
+    ax1.set_title(f"Output: {out_label}")
     ax1.grid(True, which="both", ls="-", alpha=0.5)
 
     max_gain = np.max(mag_db)
-    print(f"Max Gain: {max_gain:.4f} dB")
     ax1.axhline(max_gain - 3, color='r', linestyle='--', alpha=0.5, label="-3dB line")
     ax1.legend()
 
     ax2.semilogx(freqs, sens_mags, color='red', lw=2)
-    ax2.set_ylabel(f"Sensitivity |dVout / d{target_component}|")
+    ax2.set_ylabel(f"Sensitivity |d{out_label} / d{target_component}|")
     ax2.set_xlabel("Frequency (Hz)")
     ax2.set_title("Sensitivity vs. Frequency")
     ax2.grid(True, which="both", ls="-", alpha=0.5)
 
-    fig.savefig(f"./figures/ac/{name}.png", dpi = 600, bbox_inches = "tight" )
-
+    os.makedirs("./figures/sensitivity", exist_ok=True)
+    fig.savefig(f"./figures/sensitivity/{name}.png", dpi=600, bbox_inches="tight")
 def print_solution(V, node_map, w=0.0):
     """
     Prints the solution vector V using the unified node_map.
