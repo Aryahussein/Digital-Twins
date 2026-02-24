@@ -2,7 +2,7 @@
 * Nodes: 1=Input, 2=Midpoint, 0=GND
 
 * AC Input Source
-V1 1 0 SIN(0 10 60) ; 10V Peak, 60Hz Sine wave
+V1 1 0 SIN(0 1 60) ; 10V Peak, 60Hz Sine wave
 
 * Diode 1 (Forward biased relative to Node 1)
 D1 1 2 DMOD

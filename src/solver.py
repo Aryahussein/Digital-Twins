@@ -59,11 +59,11 @@ def solve_nonlinear_circuit(Y_base, sources_base, components, node_map, V_ini, m
             max_error = np.max(delta_v)
             
             prev_V_k = V_k.copy()
-            V_k = V_new # Update guess for next iteration
+            # V_k = V_new # Update guess for next iteration
 
             # FIX: ADD DAMPING TO THE NEWTON-RAPHSON SOLVER and some more fine control of the ramp and damping via nettlist parameters
-            # alpha = 0.5  # Only take 50% of the calculated step
-            # V_k = V_k + alpha * (V_new - V_k)
+            alpha = 1  # Only take 50% of the calculated step
+            V_k = V_k + alpha * (V_new - V_k)
 
             if print_stuff: print(f"Iteration: {i}, error = {max_error}")
             if max_error < tol:

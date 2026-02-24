@@ -13,8 +13,9 @@ M1 6 1 4 0 NMOS W=100u L=1u
 M2 3 2 4 0 NMOS W=100u L=1u
 
 * Load Resistors
-R1 5 6 2k
-R2 5 3 2k
+R1 5 6 5k
+R2 5 3 5k
+
 
 .model NMOS NMOS(Vto=1.0 Kp=100u)
 .tran 1u 5m

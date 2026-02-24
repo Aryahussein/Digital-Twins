@@ -1,28 +1,36 @@
-* RS Latch (MOSFET Level)
-* Nodes: 1=S, 2=R, 3=Q, 4=Q_not, 5=VDD, 0=GND
+* NMOS RS Latch
+* Nodes: 1=SET, 2=RESET, 3=Q, 4=Q_NOT, 5=VDD, 0=GND
 
 * Power Supply
 VDD 5 0 DC 5V
 
-* Pull-up Resistors (Load)
+* Input Pulses (Set then Reset)
+* Pulse syntax: (V1 V2 Delay Rise Fall Width Period)
+V_SET   1 0 PULSE(0 5 1m 1n 1n 1m 10m)
+V_RESET 2 0 PULSE(0 5 4m 1n 1n 1m 10m)
+
+* Load Resistors (Pull-ups)
+* 1k is chosen for speed and stability over voltage swing
 R1 5 3 1k
 R2 5 4 1k
 
-* Set/Reset Input Pulses
-VS 1 0 PULSE(0 5 1m 1n 1n 2m 10m)
-VR 2 0 PULSE(0 5 5m 1n 1n 2m 10m)
-
-* Cross-Coupled NMOS (NOR Gate Logic)
-* Gate of M1 is connected to R, Gate of M2 is connected to S
-* But for a latch, we also couple the outputs back to the gates
+* The Latch Core (Cross-Coupled)
+* M1 Gate connected to Q_NOT (4), Drain to Q (3)
+* M2 Gate connected to Q (3), Drain to Q_NOT (4)
 M1 3 4 0 0 NMOS W=100u L=1u
 M2 4 3 0 0 NMOS W=100u L=1u
 
-* Input Drivers (The S and R triggers)
-M_SET 4 1 0 0 NMOS W=150u L=1u
+* Input Triggers (Stronger Drivers)
+* M_SET pulls Q_NOT (4) to ground when SET (1) is High -> forcing Q (3) High
+M_SET   4 1 0 0 NMOS W=150u L=1u
+
+* M_RESET pulls Q (3) to ground when RESET (2) is High -> forcing Q_NOT (4) High
 M_RESET 3 2 0 0 NMOS W=150u L=1u
 
-
+* Model Definition
 .model NMOS NMOS(Vto=1.0 Kp=20u)
-.tran 10u 10m
+
+* Transient Analysis: 10ms total time, 1us step size
+.tran 1u 6m
+
 .end

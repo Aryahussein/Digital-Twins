@@ -313,20 +313,23 @@ def stamp_diode(Y, sources, comp, node_map, p_V_guess, V_guess):
     if idx2 is not None: sources[idx2] += ieq
 
 
+
 def nmos_lim(vds_new, vds_old, critical_vds):
     """
     Standard SPICE limiting algorithm for nMOS junctions.
     Prevents Vds from jumping from one region to the other without stopping at the boundary.
         (currently just triode <-> saturation)
     """
-
+    # Add a tiny epsilon to prevent division by zero
+    vds_old_safe = max(abs(vds_old), 1e-6) 
+    vds_new_safe = max(abs(vds_new), 1e-6)
+    
     if vds_new > critical_vds and abs(vds_new - vds_old) > (2 * Vt):
-        if vds_old > critical_vds:
-            # If we were already above critical, limit the rate of change
-            v_limit = vds_old + 2 * Vt * np.log(vds_new / vds_old)
+        if abs(vds_old) > 1e-3: # Only use log-limiting if we have a stable old value
+            v_limit = vds_old + 2 * Vt * np.log(vds_new_safe / vds_old_safe)
         else:
-            # If we are crossing the threshold, land exactly at critical_v
-            v_limit = critical_vds
+            # If starting from near-zero, just take a linear step
+            v_limit = vds_old + 2 * Vt 
         return v_limit
     return vds_new
 
@@ -343,12 +346,19 @@ def nmos_region(vgs, vds, vth):
     elif vgs >= vth and vds >= (vgs-vth):   # sat
         return 2
 
-def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
-    # unCox = 100e-6          # Hard-coded value for a typical mosfet
-    # W_over_L = 1            # Hard-coded placeholder
-    # Bn = unCox*W_over_L     # Hard-coded placeholder
-    # Vth = 0.4               # Hard-coded placeholder
+def nmos_vgs_lim(vgs_new, vgs_old, vth):
+    """Limits the change in Vgs to prevent numerical overflow."""
+    step_limit = 0.5 # Maximum allowed jump in volts per iteration
+    
+    delta = vgs_new - vgs_old
+    
+    # If the jump is too large, dampen it
+    if abs(delta) > step_limit:
+        vgs_new = vgs_old + np.sign(delta) * step_limit
+        
+    return vgs_new
 
+def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
     n_d, n_g, n_s, n_b = comp["n_d"], comp["n_g"], comp["n_s"], comp["n_b"]
     
     # Is = comp["model_params"]["IS"]
@@ -367,7 +377,7 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
     if "KP" in params:
         KP = params["KP"]           # Gain Parameter = mu * C_ox
     elif "MU" in params:
-        KP = params["MU"] * params["C_ox"]
+        KP = params["MU"] * params["C_OX"]
     else:
         raise ValueError("No KP or (MU and C_ox) specified for NMOS!")
 
@@ -383,86 +393,42 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
     else:
         raise RuntimeError(f"Unrecognized value {m_type}")
 
-    # Find voltages of Vgs and Vds for the new guess
-    v1 = V_guess[idx_d] if idx_d is not None else 0
-    v2 = V_guess[idx_g] if idx_g is not None else 0
-    v3 = V_guess[idx_s] if idx_s is not None else 0
-    vgs_k = v2 - v3
-    vds_k = v1 - v3
+    # 1. Grab raw voltages
+    v_d = V_guess[idx_d] if idx_d is not None else 0
+    v_g = V_guess[idx_g] if idx_g is not None else 0
+    v_s = V_guess[idx_s] if idx_s is not None else 0
+    
+    p_v_g = p_V_guess[idx_g] if idx_g is not None else 0
+    p_v_s = p_V_guess[idx_s] if idx_s is not None else 0
+    p_v_d = p_V_guess[idx_d] if idx_d is not None else 0
 
-    # Find voltages of Vgs and Vds for the previous guess
-    p_v1 = p_V_guess[idx_d] if idx_d is not None else 0
-    p_v2 = p_V_guess[idx_g] if idx_g is not None else 0
-    p_v3 = p_V_guess[idx_s] if idx_s is not None else 0
-    p_vgs_k = p_v2 - p_v3
-    p_vds_k = p_v1 - p_v3
+    # 2. APPLY LIMITING (Crucial for convergence)
+    # Limit Vgs change to prevent exponential/square-law current explosions
+    vgs_k = nmos_vgs_lim(v_g - v_s, p_v_g - p_v_s, VTO)
+    # Use your existing vds_lim
+    vds_k = nmos_lim(v_d - v_s, p_v_d - p_v_s, vgs_k - VTO)
 
-    # Limit the change of Vds possible in one guess
-    vds_k = nmos_lim(vds_k, p_vds_k, 0.2)
-        ### it will probably be necessary to limit the change of Vgs in one guess
+    # Maybe need to reimplement the edge cases algorithm here, but seems to work fine without it
 
-    # Find the operating region for current and previous 
-    region = nmos_region(vgs_k, vds_k, VTO)
-    # print(f"    Current nMOS region={region} for vgs={vgs_k}, vds={vds_k}, vth={VTO}")
-    p_region = nmos_region(p_vgs_k, p_vds_k, VTO)
-    # print(f"    Previous nMOS region={p_region} for vgs={p_vgs_k}, vds={p_vds_k}, vth={VTO}")
+    # 3. CALCULATE PHYSICS (Simplified & Unified)
+    vov = vgs_k - VTO  # Overdrive voltage
 
-    # Region has not changed
-    # if (region == p_region):
-    #     print(f"    region unchanged from {region}")
-    #     if (region == 0):
-    #         Id = 0                                                  # Id for Off state
-    #     elif (region == 1):
-    #         Id = Bn*((vgs_k-VTO)*vds_k-(vds_k**2)/2) + 1e-6         # Id for Triode state
-    #     elif (region == 2):
-    #         Id = Bn*((vgs_k-VTO)**2) + 1e-6                         # Id for Saturation state
-    #     else:
-    #         raise ValueError(f"    Error: nMOS {region} region operation not supported")
-    #
-    # # Region changed; set Id to the edge of the old/new regions
-    # else:
-    #     print(f"    region changed from {p_region} to {region}")
-    #     if (p_region == 0):                                                 # Transitioning from Off->Triode
-    #         Id = Bn*((VTO-VTO)*vds_k-(vds_k**2)/2)                          # Find Id with Vgs=VTO and current_Vds
-    #     
-    #     elif (p_region == 1):                                               # Transitioning from Triode to Off/Saturation
-    #
-    #         if (region == 0):                                               # Transitioning from Triode->Off
-    #             Id = Bn*((VTO-VTO)*vds_k-(vds_k**2)/2)                      # Find Id with Vgs=VTO and current_Vds
-    #         
-    #         elif (region == 2):                                             # Transitioning from Triode->Saturation
-    #             Id = Bn*((VTO-VTO)*(vgs_k-VTO)-((vgs_k-VTO)**2)/2)          # Find Id with Vds=Vgs-VTO and Vgs=VTO      ***Should Vgs=VTO be used here***
-    #
-    #     elif (p_region == 2):
-    #         Id = Bn*((vgs_k-VTO)*(vgs_k-VTO)-((vgs_k-VTO)**2)/2)            # Find Id with Vds=Vgs-VTO and Vgs=VTO      ***Should Vgs=VTO be used here***
-    #     else:
-    #         raise ValueError(f"    Error: pMOS {region} region operation not supported")
-    #
-    # print(f"    Id = {Id}")
+    if vov <= 0:
+        # CUTOFF
+        Id, gm, gds = 0.0, 0.0, 1e-12
+    elif vds_k < vov:
+        # TRIODE
+        Id = Bn * (vov * vds_k - 0.5 * vds_k**2)
+        gm = Bn * vds_k
+        gds = Bn * (vov - vds_k) + 1e-12
+    else:
+        # SATURATION
+        Id = 0.5 * Bn * (vov**2)
+        gm = Bn * vov
+        gds = 1e-12
 
-    # Initialize linearized parameters
-    gm = 0.0
-    gds = 1e-12  # Your "Physical Bridge" to prevent singular matrices
-    Id = 0.0
-
-    if (region == p_region):
-        if (region == 0): # OFF
-            Id = 0
-            gm = 0
-            gds = 1e-12 
-        elif (region == 1): # TRIODE (Linear)
-            Id = Bn * ((vgs_k - VTO) * vds_k - (vds_k**2) / 2)
-            gm = Bn * vds_k                        # dId/dVgs
-            gds = Bn * (vgs_k - VTO - vds_k) + 1e-12 # dId/dVds
-        elif (region == 2): # SATURATION
-            Id = 0.5 * Bn * ((vgs_k - VTO)**2)
-            gm = Bn * (vgs_k - VTO)                # dId/dVgs
-            gds = 1e-12
-
-    # if idx_d is not None: sources[idx_d] -= Id
-    # if idx_s is not None: sources[idx_s] += Id
-
-    # 1. Stamp Transconductance (Current at Drain/Source controlled by Gate)
+    # 4. STAMPING
+    # Transconductance (gm)
     if idx_d is not None:
         if idx_g is not None: Y[idx_d, idx_g] += gm
         if idx_s is not None: Y[idx_d, idx_s] -= gm
@@ -470,7 +436,7 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
         if idx_g is not None: Y[idx_s, idx_g] -= gm
         if idx_s is not None: Y[idx_s, idx_s] += gm
 
-    # 2. Stamp Output Conductance (The "physical" path between Drain and Source)
+    # Output Conductance (gds)
     if idx_d is not None:
         Y[idx_d, idx_d] += gds
         if idx_s is not None:
@@ -478,123 +444,150 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
             Y[idx_s, idx_d] -= gds
             Y[idx_s, idx_s] += gds
 
-    # 3. Stamp the Equivalent Current Source
+    # Equivalent Current (Ieq)
+    # The mathematical "Contract": Ieq = Id - (dId/dVgs)*Vgs - (dId/dVds)*Vds
     Ieq = Id - (gm * vgs_k) - (gds * vds_k)
+    
     if idx_d is not None: sources[idx_d] -= Ieq
     if idx_s is not None: sources[idx_s] += Ieq
 
 # def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
-#     """
-#     Stamps a nonlinear MOSFET into the admittance matrix Y and RHS sources.
-#     Handles both NMOS and PMOS, including the body effect and parasitic body diodes.
-#     """
-#     # 1. Extract nodes and parameters
+#     # unCox = 100e-6          # Hard-coded value for a typical mosfet
+#     # W_over_L = 1            # Hard-coded placeholder
+#     # Bn = unCox*W_over_L     # Hard-coded placeholder
+#     # Vth = 0.4               # Hard-coded placeholder
+#
 #     n_d, n_g, n_s, n_b = comp["n_d"], comp["n_g"], comp["n_s"], comp["n_b"]
-#     idx_d, idx_g, idx_s, idx_b = get_idx(n_d, node_map), get_idx(n_g, node_map), get_idx(n_s, node_map), get_idx(n_b, node_map)
 #     
-#     params = comp.get("model_params", {})
-#     m_type = comp.get("model", "NMOS") # Default to NMOS if not specified
+#     # Is = comp["model_params"]["IS"]
+#     params = comp["model_params"]
+#     inst_params = comp["inst_params"]
+#     # print(params)
+#     m_type = comp["model_type"] # Default to NMOS if not specified
+#     # m_type = params["model"]
 #     
 #     # Default Level 1 parameters
-#     VTO = params.get("VTO", 0.7)       # Zero-bias threshold voltage
-#     KP = params.get("KP", 2e-5)        # Transconductance parameter
-#     LAMBDA = params.get("LAMBDA", 0.0) # Channel length modulation
-#     GAMMA = params.get("GAMMA", 0.0)   # Body effect parameter
-#     PHI = params.get("PHI", 0.6)       # Surface potential
-#     IS = params.get("IS", 1e-14)       # Body diode saturation current
-#     
-#     # 2. Get current node voltages
-#     v_d = V_guess[idx_d] if idx_d is not None else 0.0
-#     v_g = V_guess[idx_g] if idx_g is not None else 0.0
-#     v_s = V_guess[idx_s] if idx_s is not None else 0.0
-#     v_b = V_guess[idx_b] if idx_b is not None else 0.0
-#     
-#     # 3. Handle NMOS vs PMOS polarities
-#     is_pmos = (m_type == "PMOS")
-#     if is_pmos:
-#         # Flip polarities for PMOS calculations
-#         v_ds, v_gs, v_bs = v_s - v_d, v_s - v_g, v_b - v_s 
-#         VTO = -VTO # PMOS threshold is negative
+#     VTO = params["VTO"]       # Zero-bias threshold voltage
+#     W = inst_params["W"]             # width
+#     L = inst_params["L"]             # Length
+#
+#
+#     if "KP" in params:
+#         KP = params["KP"]           # Gain Parameter = mu * C_ox
+#     elif "MU" in params:
+#         KP = params["MU"] * params["C_OX"]
 #     else:
-#         v_ds, v_gs, v_bs = v_d - v_s, v_g - v_s, v_b - v_s
+#         raise ValueError("No KP or (MU and C_ox) specified for NMOS!")
 #
-#     # Ensure v_bs doesn't cause negative square root in body effect
-#     v_bs = min(v_bs, PHI)
+#     # LAMBDA = params["LAMBDA"] # Channel length modulation
+#     # GAMMA = params.get("GAMMA", 0.0)   # Body effect parameter
+#     # PHI = params.get("PHI", 0.6)       # Surface potential
+#     # IS = params.get("IS", 1e-14)       # Body diode saturation current
+#
+#     Bn =  W/L * KP 
 #     
-#     # 4. Calculate Threshold Voltage with Body Effect
-#     if GAMMA > 0:
-#         v_th = VTO + GAMMA * (np.sqrt(max(PHI - v_bs, 0)) - np.sqrt(PHI))
+#     if (m_type == "NMOS"):
+#         idx_d, idx_g, idx_s, idx_b = get_idx(n_d, node_map), get_idx(n_g, node_map), get_idx(n_s, node_map), get_idx(n_b, node_map)
 #     else:
-#         v_th = VTO
+#         raise RuntimeError(f"Unrecognized value {m_type}")
 #
-#     # 5. Determine Region of Operation and Calculate I_D, g_m, g_ds, g_mb
-#     id_k = 0.0
-#     g_m = 0.0
-#     g_ds = 0.0
-#     g_mb = 0.0
+#     # Find voltages of Vgs and Vds for the new guess
+#     v1 = V_guess[idx_d] if idx_d is not None else 0
+#     v2 = V_guess[idx_g] if idx_g is not None else 0
+#     v3 = V_guess[idx_s] if idx_s is not None else 0
+#     vgs_k = v2 - v3
+#     vds_k = v1 - v3
 #
-#     v_ov = v_gs - v_th # Overdrive voltage
+#     # Find voltages of Vgs and Vds for the previous guess
+#     p_v1 = p_V_guess[idx_d] if idx_d is not None else 0
+#     p_v2 = p_V_guess[idx_g] if idx_g is not None else 0
+#     p_v3 = p_V_guess[idx_s] if idx_s is not None else 0
+#     p_vgs_k = p_v2 - p_v3
+#     p_vds_k = p_v1 - p_v3
 #
-#     if v_ov <= 0:
-#         # Cutoff Region
-#         pass # All currents and conductances are 0
-#         
-#     elif v_ds < v_ov:
-#         # Linear (Triode) Region
-#         id_k = KP * (v_ov * v_ds - 0.5 * v_ds**2) * (1 + LAMBDA * v_ds)
-#         g_m  = KP * v_ds * (1 + LAMBDA * v_ds)
-#         g_ds = KP * (v_ov - v_ds) * (1 + LAMBDA * v_ds) + KP * (v_ov * v_ds - 0.5 * v_ds**2) * LAMBDA
-#         
-#     else:
-#         # Saturation Region
-#         id_k = 0.5 * KP * v_ov**2 * (1 + LAMBDA * v_ds)
-#         g_m  = KP * v_ov * (1 + LAMBDA * v_ds)
-#         g_ds = 0.5 * KP * v_ov**2 * LAMBDA
+#     # Limit the change of Vds possible in one guess
+#     vds_k = nmos_lim(vds_k, p_vds_k, 0.2)
+#         ### it will probably be necessary to limit the change of Vgs in one guess
 #
-#     # Calculate bulk transconductance (g_mb) if body effect is present
-#     if GAMMA > 0 and v_ov > 0:
-#         g_mb = g_m * GAMMA / (2 * np.sqrt(max(PHI - v_bs, 1e-6)))
+#     # Find the operating region for current and previous 
+#     region = nmos_region(vgs_k, vds_k, VTO)
+#     # print(f"    Current nMOS region={region} for vgs={vgs_k}, vds={vds_k}, vth={VTO}")
+#     p_region = nmos_region(p_vgs_k, p_vds_k, VTO)
+#     # print(f"    Previous nMOS region={p_region} for vgs={p_vgs_k}, vds={p_vds_k}, vth={VTO}")
 #
-#     # 6. Reverse current direction for PMOS before stamping
-#     if is_pmos:
-#         id_k = -id_k
+#     # Region has not changed
+#     # if (region == p_region):
+#     #     print(f"    region unchanged from {region}")
+#     #     if (region == 0):
+#     #         Id = 0                                                  # Id for Off state
+#     #     elif (region == 1):
+#     #         Id = Bn*((vgs_k-VTO)*vds_k-(vds_k**2)/2) + 1e-6         # Id for Triode state
+#     #     elif (region == 2):
+#     #         Id = Bn*((vgs_k-VTO)**2) + 1e-6                         # Id for Saturation state
+#     #     else:
+#     #         raise ValueError(f"    Error: nMOS {region} region operation not supported")
+#     #
+#     # # Region changed; set Id to the edge of the old/new regions
+#     # else:
+#     #     print(f"    region changed from {p_region} to {region}")
+#     #     if (p_region == 0):                                                 # Transitioning from Off->Triode
+#     #         Id = Bn*((VTO-VTO)*vds_k-(vds_k**2)/2)                          # Find Id with Vgs=VTO and current_Vds
+#     #     
+#     #     elif (p_region == 1):                                               # Transitioning from Triode to Off/Saturation
+#     #
+#     #         if (region == 0):                                               # Transitioning from Triode->Off
+#     #             Id = Bn*((VTO-VTO)*vds_k-(vds_k**2)/2)                      # Find Id with Vgs=VTO and current_Vds
+#     #         
+#     #         elif (region == 2):                                             # Transitioning from Triode->Saturation
+#     #             Id = Bn*((VTO-VTO)*(vgs_k-VTO)-((vgs_k-VTO)**2)/2)          # Find Id with Vds=Vgs-VTO and Vgs=VTO      ***Should Vgs=VTO be used here***
+#     #
+#     #     elif (p_region == 2):
+#     #         Id = Bn*((vgs_k-VTO)*(vgs_k-VTO)-((vgs_k-VTO)**2)/2)            # Find Id with Vds=Vgs-VTO and Vgs=VTO      ***Should Vgs=VTO be used here***
+#     #     else:
+#     #         raise ValueError(f"    Error: pMOS {region} region operation not supported")
+#     #
+#     # print(f"    Id = {Id}")
 #
-#     # 7. Calculate Norton Equivalent Current (I_eq)
-#     # I_eq = I_D - g_m*v_gs - g_ds*v_ds - g_mb*v_bs
-#     i_eq = id_k - (g_m * (v_g - v_s)) - (g_ds * (v_d - v_s)) - (g_mb * (v_b - v_s))
+#     # Initialize linearized parameters
+#     gm = 0.0
+#     gds = 1e-12  # Your "Physical Bridge" to prevent singular matrices
+#     Id = 0.0
 #
-#     # 8. Stamp Conductances into Y Matrix
+#     if (region == p_region):
+#         if (region == 0): # OFF
+#             Id = 0
+#             gm = 0
+#             gds = 1e-12 
+#         elif (region == 1): # TRIODE (Linear)
+#             Id = Bn * ((vgs_k - VTO) * vds_k - (vds_k**2) / 2)
+#             gm = Bn * vds_k                        # dId/dVgs
+#             gds = Bn * (vgs_k - VTO - vds_k) + 1e-12 # dId/dVds
+#         elif (region == 2): # SATURATION
+#             Id = 0.5 * Bn * ((vgs_k - VTO)**2)
+#             gm = Bn * (vgs_k - VTO)                # dId/dVgs
+#             gds = 1e-12
+#
+#     # if idx_d is not None: sources[idx_d] -= Id
+#     # if idx_s is not None: sources[idx_s] += Id
+#
+#     # 1. Stamp Transconductance (Current at Drain/Source controlled by Gate)
 #     if idx_d is not None:
-#         Y[idx_d, idx_d] += g_ds
-#         if idx_s is not None: Y[idx_d, idx_s] -= (g_ds + g_m + g_mb)
-#         if idx_g is not None: Y[idx_d, idx_g] += g_m
-#         if idx_b is not None: Y[idx_d, idx_b] += g_mb
-#         
+#         if idx_g is not None: Y[idx_d, idx_g] += gm
+#         if idx_s is not None: Y[idx_d, idx_s] -= gm
 #     if idx_s is not None:
-#         Y[idx_s, idx_s] += (g_ds + g_m + g_mb)
-#         if idx_d is not None: Y[idx_s, idx_d] -= g_ds
-#         if idx_g is not None: Y[idx_s, idx_g] -= g_m
-#         if idx_b is not None: Y[idx_s, idx_b] -= g_mb
+#         if idx_g is not None: Y[idx_s, idx_g] -= gm
+#         if idx_s is not None: Y[idx_s, idx_s] += gm
 #
-#     # 9. Stamp Equivalent Current into RHS
-#     if idx_d is not None: sources[idx_d] -= i_eq
-#     if idx_s is not None: sources[idx_s] += i_eq
+#     # 2. Stamp Output Conductance (The "physical" path between Drain and Source)
+#     if idx_d is not None:
+#         Y[idx_d, idx_d] += gds
+#         if idx_s is not None:
+#             Y[idx_d, idx_s] -= gds
+#             Y[idx_s, idx_d] -= gds
+#             Y[idx_s, idx_s] += gds
 #
-#     # 10. Stamp Internal Parasitic Body Diodes
-#     # Re-use the existing diode stamp function to naturally handle the PN junctions
-#     diode_bd = {"type": "D", "value": IS}
-#     diode_bs = {"type": "D", "value": IS}
-#     
-#     if is_pmos:
-#         # PMOS: N-type substrate. Diodes point FROM Drain/Source TO Bulk
-#         diode_bd["n1"], diode_bd["n2"] = n_d, n_b
-#         diode_bs["n1"], diode_bs["n2"] = n_s, n_b
-#     else:
-#         # NMOS: P-type substrate. Diodes point FROM Bulk TO Drain/Source
-#         diode_bd["n1"], diode_bd["n2"] = n_b, n_d
-#         diode_bs["n1"], diode_bs["n2"] = n_b, n_s
-#
-#     # Note: We pass the global V_guess to the diode stamper
-#     import component_stamps as stamps
-#     stamps.stamp_diode(Y, sources, diode_bd, node_map, p_V_guess, V_guess)
-#     stamps.stamp_diode(Y, sources, diode_bs, node_map, p_V_guess, V_guess)
+#     # 3. Stamp the Equivalent Current Source
+#     Ieq = Id - (gm * vgs_k) - (gds * vds_k)
+#     if idx_d is not None: sources[idx_d] -= Ieq
+#     if idx_s is not None: sources[idx_s] += Ieq
+

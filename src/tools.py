@@ -104,7 +104,7 @@ def plot_transient(time, VI, node_map, output_node, folder="./figures/tran", nam
     ax.grid(True, ls="--", alpha=0.6)
     
     fig.tight_layout()
-    fig.savefig(f"{folder}/{name}.png", dpi=600)
+    fig.savefig(f"{folder}/{name}.png", dpi=600, bbox_inches='tight')
     plt.close(fig)
 
 def plot_transient_sensitivity(time, VI, sensitivities, node_map, output_node, target_component, folder="./figures/tran", name="tran_sensitivity"):

@@ -36,11 +36,6 @@ TRANSIENT_DISPATCH = {
 # 5. Non-linear components (re-stamped each Newton-Raphson iteration)
 NONLINEAR_DISPATCH = {
     'D': stamps.stamp_diode,
-}
-
-# 5. Non-linear components (re-stamped each Newton-Raphson iteration)
-NONLINEAR_DISPATCH = {
-    'D': stamps.stamp_diode,
     'M': stamps.stamp_mosfet, # Add this line
 }
 

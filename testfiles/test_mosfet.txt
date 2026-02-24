@@ -11,7 +11,7 @@ C_out   3   0  50fF     ; Small parasitic/load capacitance
 * M1 Drain Gate Source Bulk Model Width Length
 M1 3 2 0 0 N1D12 W=10u L=1u
 
-.model N1D12 NMOS (VTO=0.7 mu=0.0001)
+.model N1D12 NMOS (VTO=0.7 mu=100 C_ox=1e-6)
 
 ** Analysis Command **
 * .tran <step> <stop_time>
