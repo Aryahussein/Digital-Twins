@@ -1,0 +1,6 @@
+* test_opamp_openloop.txt
+VPLUS 1 0 DC 0.01
+VMINUS 2 0 DC 0
+A1 3 1 2 Vsat=5 k=1e6
+RLOAD 3 0 1k
+.OP

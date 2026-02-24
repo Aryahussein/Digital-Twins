@@ -1,0 +1,5 @@
+* test_opamp_buffer.txt
+VIN 1 0 DC 1
+A1 2 1 2 Vsat=5 k=1e6
+RLOAD 2 0 1k
+.OP
