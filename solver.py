@@ -48,14 +48,12 @@ def _build_k_schedule(components, k_start=10.0, num_k_steps=10):
 
 
 def _voltage_indices(node_map):
-    # node voltages are int keys; branch currents are string keys
     pairs = [(key, idx) for key, idx in node_map.items() if isinstance(key, int)]
     pairs.sort(key=lambda x: x[1])
     return np.array([idx for _, idx in pairs], dtype=int)
 
 
 def _residual_norm(Y_csc, b, x, v_idx):
-    # residual r = Yx - b, measured only on node-voltage rows
     r = Y_csc.dot(x) - b
     return float(np.max(np.abs(r[v_idx])))
 
@@ -74,13 +72,15 @@ def solve_nonlinear_circuit(
     k_start=10.0,
     num_k_steps=10,
     k_schedule=None,
-    # backtracking settings
+    # Backtracking candidates
     alphas=(1.0, 0.5, 0.25, 0.1, 0.05, 0.02),
 ):
     """
     Newton with continuation + residual-based line search.
 
-    This fixes the 'stuck error = constant' behavior you saw at k=100, src=90%.
+    ALSO IMPORTANT FOR SENSITIVITY:
+      At the end, we re-stamp the Jacobian at the FINAL solution and build LU from it.
+      This makes solve_adjoint() correct at the nonlinear operating point.
     """
     has_opamps = _has_opamps(components)
     v_idx = _voltage_indices(node_map)
@@ -94,12 +94,11 @@ def solve_nonlinear_circuit(
     # k ramp schedule
     if has_opamps and use_k_ramp:
         if k_schedule is None:
-            # more steps helps a lot for the follower
             k_schedule = _build_k_schedule(components, k_start=k_start, num_k_steps=num_k_steps)
     else:
         k_schedule = [None]
 
-    # Save original k values
+    # Save original op-amp k values
     orig_k = {}
     if has_opamps:
         for name, comp in components.items():
@@ -110,12 +109,19 @@ def solve_nonlinear_circuit(
     prev_V_k = V_ini.copy()
     lu = None
 
+    # Track the final stage settings (for final Jacobian/LU rebuild)
+    final_sources = sources_base.copy()
+    final_k_eff = None
+
     for s_factor in source_ramp:
         if use_source_ramp:
             print(f"\n--- Ramping Source: {s_factor * 100:.1f}% ---")
         sources_s = sources_base.copy() * s_factor
+        final_sources = sources_s.copy()  # will end at 100%
 
         for k_eff in k_schedule:
+            final_k_eff = k_eff
+
             if has_opamps and use_k_ramp and (k_eff is not None):
                 for name, comp in components.items():
                     if str(comp.get("type", "")).upper() == "A":
@@ -123,7 +129,7 @@ def solve_nonlinear_circuit(
                 print(f"\n=== k-ramp stage: k = {k_eff:.3g} ===")
 
             for it in range(max_iter):
-                # 1) Stamp at current guess (LIL), convert to CSC for solve
+                # Stamp at current guess
                 Y_iter = Y_base.tolil()
                 b_iter = sources_s.copy()
 
@@ -132,20 +138,20 @@ def solve_nonlinear_circuit(
                 )
                 Y_iter = Y_iter.tocsc()
 
-                # 2) Current residual norm
+                # residual at current point
                 r0 = _residual_norm(Y_iter, b_iter, V_k, v_idx)
 
-                # 3) Newton step (solve linearized system for V_new)
-                lu, V_new = solve_linear_circuit(Y_iter, b_iter)
+                # Newton candidate (solve linearized system)
+                lu_tmp, V_new = solve_linear_circuit(Y_iter, b_iter)
 
-                # 4) Backtracking line search using residual norm
+                # Backtracking line search
                 accepted = False
                 best = None
 
                 for a in alphas:
                     V_trial = V_k + a * (V_new - V_k)
 
-                    # Stamp again at trial point to measure true nonlinear residual
+                    # Re-stamp to measure true nonlinear residual at trial
                     Y_t = Y_base.tolil()
                     b_t = sources_s.copy()
                     Y_t, b_t = stamp_nonlinear_components(
@@ -164,10 +170,8 @@ def solve_nonlinear_circuit(
                         break
 
                 if not accepted:
-                    # If nothing improved enough, still take the best residual we found
                     V_next = best[1]
 
-                # convergence check on node voltages
                 max_error = float(np.max(np.abs(V_next[v_idx] - V_k[v_idx])))
 
                 prev_V_k = V_k.copy()
@@ -184,6 +188,23 @@ def solve_nonlinear_circuit(
                 if use_source_ramp:
                     stage += f"src={s_factor * 100:.1f}%"
                 raise RuntimeError(f"Newton-Raphson failed to converge at {stage}.")
+
+    # === Rebuild FINAL Jacobian + LU at the final solution (critical for adjoint sensitivities) ===
+    Y_final = Y_base.tolil()
+    b_final = final_sources.copy()
+
+    # Ensure op-amp k is at its final value before final Jacobian build
+    if has_opamps and use_k_ramp and (final_k_eff is not None):
+        for name, comp in components.items():
+            if str(comp.get("type", "")).upper() == "A":
+                comp["k"] = float(final_k_eff)
+
+    # Stamp at (V_k, V_k) to build the Jacobian at the operating point
+    Y_final, b_final = stamp_nonlinear_components(
+        Y_final, b_final, components, node_map, V_k, V_k
+    )
+    Y_final = Y_final.tocsc()
+    lu = solve_LU(Y_final)
 
     # Restore original op-amp k values
     if has_opamps:
