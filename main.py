@@ -63,29 +63,43 @@ if __name__ == "__main__":
         lu, VI = solve_linear_circuit(Y, sources)
 
     print_solution(VI, node_map, w=w)
-    #-----------------------------------------------------------------------------------
-    # get sensitivities
-    #-----------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------------
+# solve circuit
+# -----------------------------------------------------------------------------------
+if nonlinear:
+    V_guess = np.zeros(total_dim)
+    max_iter = 100
+    tol = 1e-9
+    num_ramp_steps = 10
 
-    # # select output node for adjoint input
-    # output_node_for_sensitivity = 3
-    # sensitivities, std_dev = do_sensitivity_analysis(lu, VI, output_node_for_sensitivity, node_map, total_dim, w=w)
-    # print(f"output voltage V = {VI[node_map[output_node_for_sensitivity]]} $\pm$ {std_dev} V")
+    lu, VI = solve_nonlinear_circuit(
+        Y, sources, components, node_map, V_guess,
+        max_iter=max_iter, tol=tol, num_steps=num_ramp_steps
+    )
+else:
+    lu, VI = solve_linear_circuit(Y, sources)
 
-    
-    #-----------------------------------------------------------------------------------
-    # ac stuff
-    #-----------------------------------------------------------------------------------
-    # # Example Bode Plot
-    # run_bode_plot(test_directory + "ac_lowpass.txt", output_node=2, start_freq=10, stop_freq=100000, points=200, name = "lowpass")
-    # run_bode_plot(test_directory + "ac_resonance.txt", output_node=3, start_freq=10, stop_freq=100000, points=200, name = "resonance")
+print_solution(VI, node_map, w=w)
 
-    # # Example ac sensitivity
-    # print("do sweep")
-    # plot_sensitivity_sweep(components, output_node_for_sensitivity, "R1", start_f=10, end_f=1000, name="sensitiviy")
+# ---------------------------------------------------------
+# Sensitivity of BRANCH CURRENT through A1
+# ---------------------------------------------------------
 
-    
+output_target_for_sensitivity = "A1"   # <-- this is the key change
 
+sensitivities, std_dev = do_sensitivity_analysis(
+    lu,
+    VI,
+    output_target_for_sensitivity,   # pass "A1" instead of node number
+    node_map,
+    w=w
+)
+
+print("\n--- Sensitivities ---")
+for name, val in sensitivities.items():
+    print(f"{name:15s}: {val}")
+
+print(f"\nEstimated std deviation: {std_dev}")
 
 
 
