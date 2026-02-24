@@ -1,0 +1,13 @@
+
+* Series RLC Circuit Driven at Resonance
+
+* SIN(VOFF VAMP FREQ PHASE)
+* V1 1 0 SIN(0 5 50.33k 0)
+V1 1 0 SIN(0 5 30.33k 0)
+
+* Series resistor
+R1 1 2 1k
+
+* Series capacitor and inductor
+C1 2 3 1n
+L1 3 0 10m

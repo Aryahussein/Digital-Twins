@@ -1,0 +1,16 @@
+* Ideal Inverting Amplifier
+
+* Input source
+V1 1 0 DC 1
+
+* Input resistor
+R1 1 2 10k
+
+* Feedback resistor
+R2 2 3 100k
+
+* Ideal op-amp (very large gain)
+E1 3 0 2 0 10
+
+.op
+.end

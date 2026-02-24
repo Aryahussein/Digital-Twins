@@ -1,9 +1,7 @@
-def build_node_index(components, solve_type):
+def build_node_index(components):
     """
     Builds a single mapping for all unknowns (voltages and currents).
 
-    solve_type should be set to "tran" for transient solving & can be set to anything else for AC or DC-op solving
-    
     Returns:
         var_map: dict {name_or_node: matrix_index}
         total_dim: total size of the matrix
@@ -26,13 +24,12 @@ def build_node_index(components, solve_type):
 
     # 2. Map MNA Components (Branch Currents)
     for name in components:
-        if name.startswith(("V")) or name.startswith(("L")):
+        if name.startswith(("V", "L", "E")):
             node_map[name] = current_idx
             current_idx += 1
-            
-    total_dim = current_idx
 
-    return node_map, total_dim
+    return node_map
+
 
 def invert_node_index(node_index):
     return {i: node for node, i in node_index.items()}

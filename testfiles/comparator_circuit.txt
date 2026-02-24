@@ -1,0 +1,23 @@
+* =========================================
+* Inverting Schmitt Trigger (Ideal Op-Amp)
+* =========================================
+
+* Power rails
+VCC 1 0 15
+VEE 2 0 -15
+
+* Input signal (slow ramp for visibility)
+Vin 3 0 PULSE(-10 10 0 1m 1m 20m 40m)
+
+* Positive feedback network
+R1 3 4 100k
+R2 4 5 100k
+
+* Ideal op-amp (high gain)
+E1 5 0 4 0 10
+
+* Output saturation
+B1 out 0 V = limit(V(nint), V(Vee), V(Vcc))
+
+.tran 0 80m
+.end
