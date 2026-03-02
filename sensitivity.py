@@ -1,4 +1,5 @@
 import numpy as np
+from solver import solve_adjoint
 
 # -----------------------------
 # Helpers for nonlinear devices
@@ -163,6 +164,7 @@ def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0, dt=None, Vt=0
         Ok:A
     """
     sensitivities = {}
+    
 
     for name, comp in components.items():
         # Basic 2-terminal branch info (for R/C/D/etc.)
@@ -207,6 +209,7 @@ def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0, dt=None, Vt=0
 
         # ---------------- Opamp gain ----------------
         elif name.startswith("O"):
+            # mh fix the A to B
             # Sensitivity w.r.t opamp gain A in:
             #   V(n1)-V(n2) - Aeff*(V(n3)-V(n4)) = 0
             # with Aeff = k*A (gain ramping)
@@ -242,12 +245,14 @@ def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0, dt=None, Vt=0
             # sensitivities: S = -Psi_branch * dId/dp
             # Use local finite differences (no extra circuit solves!)
 
-            # IS
+            # IS saturation current
+            # mh we don't need finite_diff as it can be done using analytical method
+            # mh we probably only need Is0 and N, the rest can be potentially removed
             Is0 = float(params.get("IS", 1e-14))
             dId_dIs = _finite_diff(lambda x: Id_with_param("IS", x), Is0)
             sensitivities[f"{name}:IS"] = -Psi_branch * dId_dIs
 
-            # N
+            # N emission factor
             N0 = float(params.get("N", 1.0))
             dId_dN = _finite_diff(lambda x: Id_with_param("N", x), N0, rel=1e-6, abs_step=1e-9)
             sensitivities[f"{name}:N"] = -Psi_branch * dId_dN
@@ -289,10 +294,13 @@ def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0, dt=None, Vt=0
 
             # VTO (handle synonyms by writing VTO)
             VTO0 = float(params.get("VTO", params.get("VT0", params.get("VTH", params.get("VTH0", 0.7)))))
+            # mh finite diff method is not needed
             dId_dVTO = _finite_diff(lambda x: Id_mos_with_param("VTO", x), VTO0, rel=1e-6, abs_step=1e-6)
             sensitivities[f"{name}:VTO"] = -Psi_ds * dId_dVTO
 
             # KP or MU/COX
+
+            # mh W and L should also be included 
             if "KP" in params:
                 KP0 = float(params["KP"])
                 dId_dKP = _finite_diff(lambda x: Id_mos_with_param("KP", x), KP0, rel=1e-6, abs_step=1e-12)
@@ -312,7 +320,6 @@ def get_all_sensitivities(components, VI, PsiPhi, node_map, w=0.0, dt=None, Vt=0
 
 def compute_step_sensitivities(lu, VI, components, node_map, output_nodes=None, w=0.0, dt=None, Vt=0.02585):
     """Solves the adjoint system and gathers sensitivities for requested output nodes."""
-    from solver import solve_adjoint
     if output_nodes is None:
         output_nodes = list(node_map.keys())
 
@@ -356,17 +363,20 @@ def aggregate_sweep_sensitivities(components, node_map, analyses,
                     list_of_lus[i], VI_list[i], components, node_map, target_nodes, dt=dt, Vt=Vt
                 )
             raw_sensitivities.append(step_sens)
-
+    # mh maybe we should start this from scratch, all the data is ok , but the data structure is really bad.
+    # mh step_data is a dict of nodes, each node is also a dict of componenet paramters (comp1:Is0, comp1:N, comp2:VTO, etc) 
+    # and its value is the sensitivity calculated from before.
     for step_data in raw_sensitivities:
         for node in target_nodes:
             for k, v in step_data[node].items():
-                if k not in sensitivity_dict[node]:
-                    sensitivity_dict[node][k] = []
-                sensitivity_dict[node][k].append(v)
+                # if k not in sensitivity_dict[node]:
+                    sensitivity_dict[node][k] = np.array([v])
+                # sensitivity_dict[node][k].append(v)
 
-    for node in sensitivity_dict:
-        for k in sensitivity_dict[node]:
-            sensitivity_dict[node][k] = np.array(sensitivity_dict[node][k])
+    # mh we are just changing sensitivity_dict[node][k] from a single valued list into a single values np array, WTF
+    # for node in sensitivity_dict:
+    #     for k in sensitivity_dict[node]:
+    #         sensitivity_dict[node][k] = np.array(sensitivity_dict[node][k])
 
     print("Sensitivity aggregation complete.")
     return sensitivity_dict

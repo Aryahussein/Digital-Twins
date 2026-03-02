@@ -14,10 +14,12 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
     node_map = build_node_index(components)
 
     # 2) Setup simulator (stamping + nonlinearity + solver routing are inside Simulator)
+    # mh why fixed ramp
     ramp = 10
     sim = Simulator(components, analyses, node_map, output_nodes, ramp=ramp)
 
     # 3) Execute requested analysis
+    #(frequencies_array, solutions_2d_array, list_of_lus, list_of_sensitivities)
     x_axis, VI, list_of_lus, raw_sens = sim.execute_analysis(
         sensitivity=sensitivity,
         keep_lus=(keep_lus or sensitivity_post)
