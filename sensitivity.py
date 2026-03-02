@@ -432,14 +432,14 @@ def aggregate_sweep_sensitivities(
         node: {k: np.array([]) for k in all_keys} for node in target_nodes
     }
     sensitivity_dict_alex: Dict[str, Dict[str, Dict[str, complex]]] = {}
+    raw_sensitivities_alex: List[Dict[str, Dict[str, Dict[str, complex]]]] = []
     if raw_sensitivities is None:
         if not list_of_lus or VI_list is None:
-            return sensitivity_dict
+            return sensitivity_dict, sensitivity_dict_alex
 
         print("Computing sensitivities from stored LU matrices...")
         is_ac = ".AC" in analyses
         raw_sensitivities: List[Dict[str, Dict[str, complex]]] = []
-        raw_sensitivities_alex: List[Dict[str, Dict[str, Dict[str, complex]]]] = []
 
         for i in range(len(list_of_lus)):
             if is_ac and freq_list is not None:
@@ -470,12 +470,14 @@ def aggregate_sweep_sensitivities(
     # and its value is the sensitivity calculated from before.ls
     for step_index, step_data in enumerate(raw_sensitivities):
         for node in target_nodes:
-            sensitivity_dict_alex[node] = raw_sensitivities_alex[step_index][node]
             for k, v in step_data[node].items():
                 # if k not in sensitivity_dict[node]:
                 sensitivity_dict[node][k] = np.array([v])
             # sensitivity_dict[node][k].append(v)
 
+    for step_data in raw_sensitivities_alex:
+        for node in target_nodes:
+            sensitivity_dict_alex[node] = step_data[node]
     # mh we are just changing sensitivity_dict[node][k] from a single valued list into a single values np array, WTF
     # for node in sensitivity_dict:
     #     for k in sensitivity_dict[node]:

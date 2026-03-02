@@ -16,7 +16,7 @@ def run_simulation_core(
     output_nodes=None,
     sensitivity=False,
     sensitivity_post=False,
-    keep_lus=False,
+    keep_lus=True,
 ):
     # 1) Parse netlist
     parser = NetlistParser()
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     # ==========================================
     # TOGGLE THIS TO SWITCH BETWEEN GUI AND CLI
-    USE_GUI = False
+    USE_GUI = True
     # ==========================================
 
     if USE_GUI:
