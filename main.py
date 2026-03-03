@@ -2,11 +2,22 @@ from parser import NetlistParser
 from simulations import Simulator
 from node_index import build_node_index
 from sensitivity import aggregate_sweep_sensitivities, compute_step_sensitivities
-from tools import make_bode_plot, plot_ac_sensitivity, plot_transient, plot_transient_sensitivity
+from tools import (
+    make_bode_plot,
+    plot_ac_sensitivity,
+    plot_transient,
+    plot_transient_sensitivity,
+)
 import numpy as np
 
 
-def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sensitivity_post=False, keep_lus=False):
+def run_simulation_core(
+    netlist_path,
+    output_nodes=None,
+    sensitivity=False,
+    sensitivity_post=False,
+    keep_lus=True,
+):
     # 1) Parse netlist
     parser = NetlistParser()
     components, analyses = parser.parse(netlist_path)
@@ -19,10 +30,9 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
     sim = Simulator(components, analyses, node_map, output_nodes, ramp=ramp)
 
     # 3) Execute requested analysis
-    #(frequencies_array, solutions_2d_array, list_of_lus, list_of_sensitivities)
+    # (frequencies_array, solutions_2d_array, list_of_lus, list_of_sensitivities)
     x_axis, VI, list_of_lus, raw_sens = sim.execute_analysis(
-        sensitivity=sensitivity,
-        keep_lus=(keep_lus or sensitivity_post)
+        sensitivity=sensitivity, keep_lus=(keep_lus or sensitivity_post)
     )
 
     sens_post_proc = raw_sens
@@ -34,7 +44,7 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
 
         if ".TRAN" in analyses or ".AC" in analyses:
             dt = analyses.get(".TRAN", {}).get("step", None)
-            sens_post_proc = aggregate_sweep_sensitivities(
+            sens_post_proc, sens_post_proc_alex = aggregate_sweep_sensitivities(
                 components,
                 node_map,
                 analyses,
@@ -43,20 +53,24 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
                 list_of_lus=list_of_lus,
                 VI_list=VI,
                 freq_list=x_axis if ".AC" in analyses else None,
-                dt=dt
+                dt=dt,
             )
         else:
             # OP: single-step sensitivity
-            lu0 = list_of_lus[0] if isinstance(list_of_lus, (list, tuple)) else list_of_lus
+            lu0 = (
+                list_of_lus[0]
+                if isinstance(list_of_lus, (list, tuple))
+                else list_of_lus
+            )
             VI0 = VI[0] if isinstance(VI, (list, tuple)) else VI
 
-            sens_post_proc = compute_step_sensitivities(
+            sens_post_proc, sens_post_proc_alex = compute_step_sensitivities(
                 lu0,
                 VI0,
                 components,
                 node_map,
                 output_nodes,
-                w=(analyses.get(".OP", {}).get("freq", 0.0) * 2 * np.pi)
+                w=(analyses.get(".OP", {}).get("freq", 0.0) * 2 * np.pi),
             )
 
     return {
@@ -66,8 +80,9 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
         "x_axis": x_axis,
         "VI": VI,
         "sens_post_proc": sens_post_proc,
+        "sens_post_proc_alex": sens_post_proc_alex,
         "output_nodes": output_nodes,
-        "list_of_lus": list_of_lus
+        "list_of_lus": list_of_lus,
     }
 
 
@@ -75,7 +90,7 @@ if __name__ == "__main__":
 
     # ==========================================
     # TOGGLE THIS TO SWITCH BETWEEN GUI AND CLI
-    USE_GUI = False
+    USE_GUI = True
     # ==========================================
 
     if USE_GUI:
@@ -89,46 +104,48 @@ if __name__ == "__main__":
     else:
         import argparse
 
-        ap = argparse.ArgumentParser(description="Run circuit simulation + optional sensitivity.")
+        ap = argparse.ArgumentParser(
+            description="Run circuit simulation + optional sensitivity."
+        )
         ap.add_argument(
             "netlist",
-            help="Path to netlist .txt OR a testfiles name like RS_latch (without .txt)"
+            help="Path to netlist .txt OR a testfiles name like RS_latch (without .txt)",
         )
         ap.add_argument(
             "--testdir",
             default="testfiles",
-            help="Folder used when netlist is provided as a name (default: ../testfiles)"
+            help="Folder used when netlist is provided as a name (default: ../testfiles)",
         )
         ap.add_argument(
             "--nodes",
             default=None,
-            help="Comma-separated output nodes for adjoint (e.g. 2 or 2,3). If omitted: all nodes."
+            help="Comma-separated output nodes for adjoint (e.g. 2 or 2,3). If omitted: all nodes.",
         )
         ap.add_argument(
             "--plotnode",
             default=None,
-            help="Single node number to plot (e.g. 2). If omitted: use tools default behavior."
+            help="Single node number to plot (e.g. 2). If omitted: use tools default behavior.",
         )
         ap.add_argument(
             "--component",
             default=None,
             help='Component key to plot sensitivity for (e.g. "R1" or "D1:RS" or "M1:VTO"). '
-                 "If omitted, your plotting function may plot all keys (if implemented)."
+            "If omitted, your plotting function may plot all keys (if implemented).",
         )
         ap.add_argument(
             "--sens",
             action="store_true",
-            help="Compute sensitivity during solve (lower memory). Recommended for few nodes."
+            help="Compute sensitivity during solve (lower memory). Recommended for few nodes.",
         )
         ap.add_argument(
             "--senspost",
             action="store_true",
-            help="Compute sensitivity in post-processing across sweep (stores LU). Best for full sweeps."
+            help="Compute sensitivity in post-processing across sweep (stores LU). Best for full sweeps.",
         )
         ap.add_argument(
             "--keep_lus",
             action="store_true",
-            help="Force keeping LU factors (useful for debugging)."
+            help="Force keeping LU factors (useful for debugging).",
         )
 
         args = ap.parse_args()
@@ -164,7 +181,7 @@ if __name__ == "__main__":
             output_nodes=target_nodes,
             sensitivity=sensitivity,
             sensitivity_post=sens_post_proc,
-            keep_lus=keep_lus
+            keep_lus=keep_lus,
         )
 
         analyses = results["analyses"]
@@ -176,30 +193,50 @@ if __name__ == "__main__":
         # Visualize
         if ".AC" in analyses:
             make_bode_plot(
-                x_axis, VI, node_map, plot_node,
-                folder="../figures/ac", name=f"{netlist_name}_bode"
+                x_axis,
+                VI,
+                node_map,
+                plot_node,
+                folder="../figures/ac",
+                name=f"{netlist_name}_bode",
             )
             if sens_post_proc or sensitivity:
                 plot_ac_sensitivity(
-                    x_axis, VI, sensitivities_list, node_map, plot_node,
+                    x_axis,
+                    VI,
+                    sensitivities_list,
+                    node_map,
+                    plot_node,
                     target_component=args.component,
-                    folder="../figures/ac", name=f"{netlist_name}_ac_sens"
+                    folder="../figures/ac",
+                    name=f"{netlist_name}_ac_sens",
                 )
 
         elif ".TRAN" in analyses:
             plot_transient(
-                x_axis, VI, node_map, plot_node,
-                folder="../figures/tran", name=f"{netlist_name}_tran"
+                x_axis,
+                VI,
+                node_map,
+                plot_node,
+                folder="../figures/tran",
+                name=f"{netlist_name}_tran",
             )
             if sens_post_proc or sensitivity:
                 plot_transient_sensitivity(
-                    x_axis, VI, sensitivities_list, node_map, plot_node,
+                    x_axis,
+                    VI,
+                    sensitivities_list,
+                    node_map,
+                    plot_node,
                     target_component=args.component,
-                    folder="../figures/tran", name=f"{netlist_name}_tran_sens"
+                    folder="../figures/tran",
+                    name=f"{netlist_name}_tran_sens",
                 )
 
         else:
             # OP
             if sens_post_proc or sensitivity:
-                print(f"Sensitivity for output nodes {target_nodes if target_nodes is not None else 'ALL'}:")
+                print(
+                    f"Sensitivity for output nodes {target_nodes if target_nodes is not None else 'ALL'}:"
+                )
                 print(sensitivities_list)
