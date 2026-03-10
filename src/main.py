@@ -32,7 +32,13 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
         if output_nodes is None:
             output_nodes = list(node_map.keys())
 
-        if ".TRAN" in analyses or ".AC" in analyses:
+        # =====================================================================
+        # NEW BYPASS: Skip aggregation if we already have True Adjoint results!
+        # =====================================================================
+        if isinstance(raw_sens, dict) and "Integrated_Transient" in raw_sens:
+            sens_post_proc = raw_sens
+
+        elif ".TRAN" in analyses or ".AC" in analyses:
             sens_post_proc = aggregate_sweep_sensitivities(
                 components, node_map, analyses, raw_sensitivities=raw_sens, 
                 output_nodes=output_nodes, list_of_lus=list_of_lus, 
@@ -41,8 +47,9 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, sens
         else: #OP, no sweep needed, only one step
             if sensitivity_post:
                 sens_post_proc = compute_step_sensitivities(
-                list_of_lus, VI, components, node_map, output_nodes, 
-                w=(analyses.get(".OP", {}).get("freq", 0.0) * 2 * np.pi))
+                    list_of_lus, VI, components, node_map, output_nodes, 
+                    w=(analyses.get(".OP", {}).get("freq", 0.0) * 2 * np.pi)
+                )
 
     return {
         "analyses": analyses, "components": components, "node_map": node_map,
@@ -66,18 +73,17 @@ if __name__ == "__main__":
         root.mainloop()
         
     else:
-        netlist = "RS_latch" # Choose your netlist here
-
+        netlist = "rc_transient" # Choose your netlist here
+        target_node = ["out"]
+        target_node_for_plotting = ["out"]
+        target_component = "C1" # Let's look at the capacitor!
+        
         file_path = f"../testfiles/{netlist}.txt"
 
-        target_node = [2] # If None, will do adjoint on all nodes
-        target_node_for_plotting = None
-        target_component = "D1" # Needed for plotting
-        
         keep_lus = False
 
         # Choose how to compute the sensitivity
-        sensitivity = False # Good for when you only need to have the sensitivity at a few output nodes (less memory needed)
+        sensitivity = True # Good for when you only need to have the sensitivity at a few output nodes (less memory needed)
         sens_post_proc = False # Good when you need to have the sensitivity at all output nodes
 
         if sens_post_proc:
@@ -115,8 +121,33 @@ if __name__ == "__main__":
 
         elif ".TRAN" in analyses:
             plot_transient(x_axis, VI, node_map, target_node_for_plotting, folder="../figures/tran", name=f"{netlist}_tran")
+            
             if sens_post_proc or sensitivity:
-                plot_transient_sensitivity(x_axis, VI, sensitivities_list, node_map, target_node_for_plotting, target_component=target_component, folder="../figures/tran", name=f"{netlist}_tran_sens")
+                # Check if this is our new True Adjoint dictionary
+                if isinstance(sensitivities_list, dict) and "Integrated_Transient" in sensitivities_list:
+                    integ_sens = sensitivities_list["Integrated_Transient"]
+                    time_series = sensitivities_list["Time_Series"]
+                    
+                    # 1. Print the Integrated Scalars
+                    print(f"\n=======================================================")
+                    print(f" INTEGRATED TRANSIENT SENSITIVITIES")
+                    print(f" Objective: Output Voltage at t={x_axis[-1]:.4f}s")
+                    print(f"=======================================================")
+                    for param, val in integ_sens.items():
+                        print(f"  {param:<15} : {val:+.6e}")
+                    print(f"=======================================================\n")
+                    
+                    # 2. Plot the Time-Series Integrand
+                    plot_transient_sensitivity(
+                        x_axis, VI, time_series, node_map, target_node, 
+                        target_component=target_component, folder="../figures/tran", name=f"{netlist}_tran_sens"
+                    )
+                else:
+                    # Fallback for standard step-wise post-processing
+                    plot_transient_sensitivity(
+                        x_axis, VI, sensitivities_list, node_map, target_node, 
+                        target_component=target_component, folder="../figures/tran", name=f"{netlist}_tran_sens"
+                    )
 
         else:
             if sens_post_proc or sensitivity:

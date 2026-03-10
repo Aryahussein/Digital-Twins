@@ -4,6 +4,7 @@ from solver import solve_nonlinear_circuit, solve_linear_circuit
 from assembleYmatrix import initialize_stamps, stamp_source_components, stamp_mna_connections, stamp_dynamic_components, stamp_transient_components, stamp_nonlinear_components, stamp_static_components
 from sensitivity import compute_step_sensitivities
 from tools import print_solution
+from sensitivity import compute_transient_adjoint
 
 class Simulator:
     def __init__(self, components, analyses, node_map, output_nodes=None, ramp=1):
@@ -162,6 +163,10 @@ class Simulator:
 
         return frequencies, np.array(VIs), list_of_lus, list_of_sensitivities
 
+
+    # =========================================================================
+    # MODIFIED: run_transient
+    # =========================================================================
     def run_transient(self, t_stop, dt, output_nodes=None, keep_lus=False, sensitivity=False):
         """
         Executes a time-domain transient simulation using Backward Euler integration.
@@ -180,26 +185,37 @@ class Simulator:
         """
         time_array = np.arange(0, t_stop, dt)
         results = np.zeros((len(time_array), self.total_dim))
-        list_of_lus, list_of_sensitivities = ([] if keep_lus else None), ([] if sensitivity else None)
-
-        # Calculate True Initial Conditions
+        
+        list_of_lus = [] 
+        
         comp_t0 = evaluate_all_time_sources(self.components, 0.0)
         _, v_prev = self._get_dc_bias(evaluated_components=comp_t0)
-
-        print(f"Initial Conditions: {v_prev}")
         
         for step, t in enumerate(time_array):
-            print(f"Solving at time {t}")
+            if step % max(1, len(time_array)//10) == 0: 
+                print(f"Solving forward time {t:.3f}")
+                
             comp_t = evaluate_all_time_sources(self.components, t)
             lu, VI = self._solve_single_time_step(comp_t, dt, v_prev)
 
             results[step, :] = VI
             v_prev = VI 
 
-            if keep_lus: list_of_lus.append(lu)
-            if sensitivity: list_of_sensitivities.append(compute_step_sensitivities(lu, VI, self.components, self.node_map, output_nodes, dt=dt))
+            if keep_lus or sensitivity: 
+                list_of_lus.append(lu)
 
-        return time_array, results, list_of_lus, list_of_sensitivities
+        # ==========================================
+        # Call the refactored adjoint method here!
+        # ==========================================
+        if sensitivity:
+            list_of_sensitivities = compute_transient_adjoint(
+                self.components, self.node_map, time_array, results, list_of_lus, dt, output_nodes, method='BE'
+            )
+        else:
+            list_of_sensitivities = None
+
+        return time_array, results, (list_of_lus if keep_lus else None), list_of_sensitivities
+
 
     def execute_analysis(self, sensitivity=False, keep_lus=False):
         """

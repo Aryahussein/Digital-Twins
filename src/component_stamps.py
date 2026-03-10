@@ -1,5 +1,6 @@
 import numpy as np
 from constants import *
+import models
 
 def get_idx(node, node_map):
     """Returns the matrix index for a node/name, or None if it is Ground (0)."""
@@ -243,6 +244,58 @@ def stamp_inductor_be(Y, sources, comp, node_map, name, dt, v_prev):
     # Thevenin equivalent (L/dt)*i(t)
     V_eq = L * v_prev[idx] / dt
     sources[idx] -= V_eq
+
+#==============================================================================
+# ADJOINT RHS STAMPS
+#==============================================================================
+
+def get_branch_v(v_vector, comp, node_map):
+    """Helper to get voltage across a component."""
+    i, j = get_idx(comp["n1"], node_map), get_idx(comp["n2"], node_map)
+    v1 = v_vector[i] if i is not None else 0.0
+    v2 = v_vector[j] if j is not None else 0.0
+    return v1 - v2, i, j
+
+# ------------------------------------------------------------------------------
+# BACKWARD EULER (BE) ADJOINT STAMPS
+# ------------------------------------------------------------------------------
+def stamp_adjoint_rhs_capacitor_be(J_hist, comp, node_map, name, dt, v_hat_next, adjoint_state):
+    C = comp["value"]
+    v_diff_next, i, j = get_branch_v(v_hat_next, comp, node_map)
+    
+    I_eq = (C / dt) * v_diff_next
+    if i is not None: J_hist[i] += I_eq
+    if j is not None: J_hist[j] -= I_eq
+
+def update_adjoint_state_be(comp, node_map, name, dt, v_hat_next, v_hat, adjoint_state):
+    # Backward Euler has no persistent state variable, so this does nothing!
+    pass
+
+# ------------------------------------------------------------------------------
+# TRAPEZOIDAL (TR) ADJOINT STAMPS
+# ------------------------------------------------------------------------------
+def stamp_adjoint_rhs_capacitor_tr(J_hist, comp, node_map, name, dt, v_hat_next, adjoint_state):
+    C = comp["value"]
+    v_diff_next, i, j = get_branch_v(v_hat_next, comp, node_map)
+    
+    # Fetch the state from the "future" (which we already calculated in the backward loop)
+    # Default to 0.0 if it's the very first backward step
+    i_state = adjoint_state.get(name, 0.0) 
+    
+    I_eq = (2.0 * C / dt) * v_diff_next + i_state
+    
+    if i is not None: J_hist[i] += I_eq
+    if j is not None: J_hist[j] -= I_eq
+
+def update_adjoint_state_capacitor_tr(comp, node_map, name, dt, v_hat_next, v_hat, adjoint_state):
+    C = comp["value"]
+    v_diff_next, _, _ = get_branch_v(v_hat_next, comp, node_map)
+    v_diff_curr, _, _ = get_branch_v(v_hat, comp, node_map)
+    
+    i_state_next = adjoint_state.get(name, 0.0)
+    
+    # Update the state for the *next* backward step (t_{n-1})
+    adjoint_state[name] = (2.0 * C / dt) * (v_diff_next - v_diff_curr) + i_state_next
    
 
 # =============================================================================
@@ -273,15 +326,13 @@ def stamp_diode(Y, sources, comp, node_map, p_V_guess, V_guess):
     else:
         raise ValueError("No value or model specified for diode!")
 
-    # print(Is)
-
     idx1, idx2 = get_idx(n1, node_map), get_idx(n2, node_map)
-    
+
     # Calculate current Vd from the previous iteration's guess
     v1 = V_guess[idx1] if idx1 is not None else 0
     v2 = V_guess[idx2] if idx2 is not None else 0
     vd_k = v1 - v2
-    
+
     p_v1 = p_V_guess[idx1] if idx1 is not None else 0
     p_v2 = p_V_guess[idx2] if idx2 is not None else 0
     p_vd_k = p_v1 - p_v2
@@ -289,16 +340,17 @@ def stamp_diode(Y, sources, comp, node_map, p_V_guess, V_guess):
     # limit the amount v can jump at a time & prevent overflows
     n_vd_k = pnjlim(vd_k, p_vd_k, 1)
 
-    # 1. Calculate linearization components
-    exp_term = np.exp(n_vd_k / Vt)
-    id_k = Is * (exp_term - 1)
+    # ==========================================
+    # 1. CALL THE MODEL
+    # ==========================================
+    # (Assuming Vt is imported from your constants file)
+    diode_data = models.evaluate_diode(n_vd_k, Is, Vt)
+    id_k = diode_data["I_D"]
+    gd = diode_data["gd"]
 
-    # gd = dI/dV = linear conductance
-    gd = (Is / Vt) * exp_term
-    
-    # linearized companion model
+    # linearized companion model (Equivalent current source)
     ieq = id_k - gd * n_vd_k
-    
+
     # 2. Stamp gd into Y (like a resistor)
     if idx1 is not None:
         Y[idx1, idx1] += gd
@@ -307,12 +359,10 @@ def stamp_diode(Y, sources, comp, node_map, p_V_guess, V_guess):
             Y[idx2, idx1] -= gd
     if idx2 is not None:
         Y[idx2, idx2] += gd
-        
+
     # 3. Stamp Ieq into RHS vector
     if idx1 is not None: sources[idx1] -= ieq
     if idx2 is not None: sources[idx2] += ieq
-
-
 
 def nmos_lim(vds_new, vds_old, critical_vds):
     """
@@ -358,42 +408,37 @@ def nmos_vgs_lim(vgs_new, vgs_old, vth):
         
     return vgs_new
 
+
+
 def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
     n_d, n_g, n_s, n_b = comp["n_d"], comp["n_g"], comp["n_s"], comp["n_b"]
     
-    # Is = comp["model_params"]["IS"]
     params = comp["model_params"]
     inst_params = comp["inst_params"]
-    # print(params)
-    m_type = comp["model_type"] # Default to NMOS if not specified
-    # m_type = params["model"]
+    m_type = comp["model_type"] 
     
-    # Default Level 1 parameters
-    VTO = params["VTO"]       # Zero-bias threshold voltage
-    W = inst_params["W"]             # width
-    L = inst_params["L"]             # Length
-
+    VTO = params["VTO"]       
+    W = inst_params["W"]             
+    L = inst_params["L"]             
 
     if "KP" in params:
-        KP = params["KP"]           # Gain Parameter = mu * C_ox
+        KP = params["KP"]           
     elif "MU" in params:
         KP = params["MU"] * params["C_OX"]
     else:
         raise ValueError("No KP or (MU and C_ox) specified for NMOS!")
 
-    # LAMBDA = params["LAMBDA"] # Channel length modulation
-    # GAMMA = params.get("GAMMA", 0.0)   # Body effect parameter
-    # PHI = params.get("PHI", 0.6)       # Surface potential
-    # IS = params.get("IS", 1e-14)       # Body diode saturation current
-
     Bn =  W/L * KP 
     
     if (m_type == "NMOS"):
-        idx_d, idx_g, idx_s, idx_b = get_idx(n_d, node_map), get_idx(n_g, node_map), get_idx(n_s, node_map), get_idx(n_b, node_map)
+        idx_d = get_idx(n_d, node_map)
+        idx_g = get_idx(n_g, node_map)
+        idx_s = get_idx(n_s, node_map)
+        idx_b = get_idx(n_b, node_map)
     else:
         raise RuntimeError(f"Unrecognized value {m_type}")
 
-    # 1. Grab raw voltages
+    # Grab raw voltages
     v_d = V_guess[idx_d] if idx_d is not None else 0
     v_g = V_guess[idx_g] if idx_g is not None else 0
     v_s = V_guess[idx_s] if idx_s is not None else 0
@@ -402,32 +447,16 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
     p_v_s = p_V_guess[idx_s] if idx_s is not None else 0
     p_v_d = p_V_guess[idx_d] if idx_d is not None else 0
 
-    # 2. APPLY LIMITING (Crucial for convergence)
-    # Limit Vgs change to prevent exponential/square-law current explosions
+    # APPLY LIMITING
     vgs_k = nmos_vgs_lim(v_g - v_s, p_v_g - p_v_s, VTO)
-    # Use your existing vds_lim
     vds_k = nmos_lim(v_d - v_s, p_v_d - p_v_s, vgs_k - VTO)
 
-    # Maybe need to reimplement the edge cases algorithm here, but seems to work fine without it
+    nmos_data = models.evaluate_nmos(vgs_k, vds_k, VTO, Bn)
+    Id = nmos_data["I_D"]
+    gm = nmos_data["gm"]
+    gds = nmos_data["gds"]
 
-    # 3. CALCULATE PHYSICS (Simplified & Unified)
-    vov = vgs_k - VTO  # Overdrive voltage
-
-    if vov <= 0:
-        # CUTOFF
-        Id, gm, gds = 0.0, 0.0, 1e-12
-    elif vds_k < vov:
-        # TRIODE
-        Id = Bn * (vov * vds_k - 0.5 * vds_k**2)
-        gm = Bn * vds_k
-        gds = Bn * (vov - vds_k) + 1e-12
-    else:
-        # SATURATION
-        Id = 0.5 * Bn * (vov**2)
-        gm = Bn * vov
-        gds = 1e-12
-
-    # 4. STAMPING
+    # STAMPING
     # Transconductance (gm)
     if idx_d is not None:
         if idx_g is not None: Y[idx_d, idx_g] += gm
@@ -445,11 +474,11 @@ def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
             Y[idx_s, idx_s] += gds
 
     # Equivalent Current (Ieq)
-    # The mathematical "Contract": Ieq = Id - (dId/dVgs)*Vgs - (dId/dVds)*Vds
     Ieq = Id - (gm * vgs_k) - (gds * vds_k)
     
     if idx_d is not None: sources[idx_d] -= Ieq
     if idx_s is not None: sources[idx_s] += Ieq
+
 
 # def stamp_mosfet(Y, sources, comp, node_map, p_V_guess, V_guess):
 #     # unCox = 100e-6          # Hard-coded value for a typical mosfet

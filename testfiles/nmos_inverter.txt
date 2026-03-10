@@ -1,0 +1,9 @@
+* NMOS Inverter with Capacitive Load
+V1 vdd 0 5.0
+V2 in 0 PULSE(0 5 1e-9 0.1e-9 0.1e-9 5e-9 10e-9)
+R1 vdd out 10000
+M1 out in 0 0 NMOS_MOD W=2e-6 L=1e-6
+C1 out 0 100e-15
+
+.MODEL NMOS_MOD NMOS (VTO=0.7 KP=100e-6)
+.TRAN 0.1e-9 4e-9

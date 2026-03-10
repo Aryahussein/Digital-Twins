@@ -40,6 +40,27 @@ NONLINEAR_DISPATCH = {
 }
 
 
+ADJOINT_RHS_DISPATCH = {
+    'BE': {
+        'C': stamps.stamp_adjoint_rhs_capacitor_be,
+        # 'L': stamps.stamp_adjoint_rhs_inductor_be
+    },
+    'TR': {
+        'C': stamps.stamp_adjoint_rhs_capacitor_tr,
+        # 'L': stamps.stamp_adjoint_rhs_inductor_tr
+    }
+}
+
+ADJOINT_STATE_DISPATCH = {
+    'BE': {
+        'C': stamps.update_adjoint_state_be,
+    },
+    'TR': {
+        'C': stamps.update_adjoint_state_capacitor_tr,
+    }
+}
+
+
 def initialize_stamps(total_dim, is_complex=False):
     """Create empty sparse matrix and source vector with appropriate dtype."""
     dtype = complex if is_complex else float
@@ -136,6 +157,35 @@ def stamp_transient_components(Y, sources, components, node_map, dt, v_prev):
             TRANSIENT_DISPATCH[type_char](Y, sources, comp, node_map, name, dt=dt, v_prev=v_prev)
 
     return Y.tocsc(), sources
+
+
+def build_adjoint_history_source(components, node_map, dt, v_hat_next, adjoint_state, method='BE'):
+    """
+    Builds the history RHS vector for the backward adjoint pass.
+    Passes the state of dynamic components backward in time using the dispatcher.
+    """
+    J_hist = np.zeros(len(node_map))
+    dispatcher = ADJOINT_RHS_DISPATCH.get(method, {})
+    
+    for name, comp in components.items():
+        type_char = comp['type']
+        if type_char in dispatcher:
+            dispatcher[type_char](J_hist, comp, node_map, name, dt, v_hat_next, adjoint_state)
+            
+    return J_hist
+
+
+def update_adjoint_state(components, node_map, dt, v_hat_next, v_hat, adjoint_state, method='BE'):
+    """
+    Updates the persistent history variables (like I_state for Trapezoidal) 
+    for the next backward-in-time step.
+    """
+    dispatcher = ADJOINT_STATE_DISPATCH.get(method, {})
+    
+    for name, comp in components.items():
+        type_char = comp['type']
+        if type_char in dispatcher:
+            dispatcher[type_char](comp, node_map, name, dt, v_hat_next, v_hat, adjoint_state)
 
 
 def stamp_nonlinear_components(Y, sources, components, node_map, v_prev, v_guess):

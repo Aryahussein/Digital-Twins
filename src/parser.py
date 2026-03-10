@@ -133,7 +133,7 @@ class NetlistParser:
             self._throw_error(f"Missing nodes or value for '{name}'. Format: Name N1 N2 Value")
         return {
             "type": type_char, 
-            "n1": int(tokens[1]), "n2": int(tokens[2]), 
+            "n1": self._parse_node(tokens[1]), "n2": self._parse_node(tokens[2]), 
             "value": self._parse_value(tokens[3])
         }
 
@@ -141,7 +141,7 @@ class NetlistParser:
         if len(tokens) < 4: 
             self._throw_error(f"Missing nodes or model for diode '{name}'. Format: Name N+ N- Model/Value")
         
-        comp = {"type": type_char, "n1": int(tokens[1]), "n2": int(tokens[2])}
+        comp = {"type": type_char, "n1": self._parse_node(tokens[1]), "n2": self._parse_node(tokens[2])}
         token3 = tokens[3]
         
         try:
@@ -161,7 +161,8 @@ class NetlistParser:
         inst_params, _ = self._extract_params(tokens[6:]) 
         return {
             "type": type_char, 
-            "n_d": int(tokens[1]), "n_g": int(tokens[2]), "n_s": int(tokens[3]), "n_b": int(tokens[4]), 
+            "n_d": self._parse_node(tokens[1]), "n_g": self._parse_node(tokens[2]), 
+            "n_s": self._parse_node(tokens[3]), "n_b": self._parse_node(tokens[4]), 
             "model": tokens[5].upper(), 
             "inst_params": inst_params 
         }
@@ -173,7 +174,7 @@ class NetlistParser:
         source_data = self._parse_source_def(tokens[3:])
         comp_data = {
             "type": type_char, 
-            "n1": int(tokens[1]), "n2": int(tokens[2]), 
+            "n1": self._parse_node(tokens[1]), "n2": self._parse_node(tokens[2]), 
             "value": source_data["dc"], 
             "ac_mag": source_data["ac_mag"], 
             "ac_phase": source_data["ac_phase"]
@@ -187,14 +188,24 @@ class NetlistParser:
             self._throw_error(f"Malformed VCCS '{name}'. Format: Name N+ N- NC+ NC- Gain")
         return {
             "type": type_char, 
-            "n1": int(tokens[1]), "n2": int(tokens[2]), 
-            "n3": int(tokens[3]), "n4": int(tokens[4]), 
+            "n1": self._parse_node(tokens[1]), "n2": self._parse_node(tokens[2]), 
+            "n3": self._parse_node(tokens[3]), "n4": self._parse_node(tokens[4]), 
             "value": self._parse_value(tokens[5])
         }
 
     # =========================================================================
     # STRING & VALUE PARSING UTILITIES
     # =========================================================================
+    @staticmethod
+    def _parse_node(node_str):
+        """Allows nodes to be strings (e.g., 'vdd') or integers."""
+        if node_str == "0" or node_str.upper() == "GND":
+            return 0
+        try:
+            return int(node_str)
+        except ValueError:
+            return node_str
+
     def _parse_source_def(self, tokens):
         source_def = {"dc": 0.0, "ac_mag": 0.0, "ac_phase": 0.0, "tran": None}
         i = 0

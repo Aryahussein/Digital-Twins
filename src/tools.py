@@ -91,6 +91,9 @@ def plot_transient(time, VI, node_map, output_node, folder="./figures/tran", nam
 
     if output_node is None:
         output_node = list(node_map.keys())
+
+    elif not isinstance(output_node, (list, tuple)):
+        output_node = [output_node]
     
     for node in output_node:
         node_idx = node_map[node]
@@ -109,11 +112,16 @@ def plot_transient(time, VI, node_map, output_node, folder="./figures/tran", nam
 
 def plot_transient_sensitivity(time, VI, sensitivities, node_map, output_node, target_component, folder="./figures/tran", name="tran_sensitivity"):
     """Plots Transient Voltage alongside the Transient Sensitivity for a specific component."""
-    print(f"Plotting transient sensitivity for output node {output_node} w.r.t {target_component}...")
-    output_node = output_node[0] 
-    idx = node_map[output_node]
-    V_out = np.real(VI[:, idx])
     
+    # ADD THIS SAFETY CHECK: Use first node if a list is passed, otherwise keep the string
+    if isinstance(output_node, (list, tuple)):
+        output_node = output_node[0] 
+        
+    print(f"Plotting transient sensitivity for output node {output_node} w.r.t {target_component}...")
+    
+    idx = node_map[output_node]
+    V_out = np.real(VI[:, idx]) 
+
     # Extract real part of the sensitivity over time
     sens_array = np.real(sensitivities[output_node][target_component])
 

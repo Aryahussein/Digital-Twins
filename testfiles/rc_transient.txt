@@ -1,6 +1,6 @@
-* RC Transient - Step Response
-* Tau = RC = 1k * 1u = 1ms
-V1 1 0 PULSE(0 5 0 1n 1n 5m 10m)
-R1 1 2 1k
-C1 2 0 1u
-.TRAN 10u 20m
+* Textbook RC Charge and Discharge
+V1 in 0 PULSE(0 5 0 1e-6 1e-6 1e-3 2e-3)
+R1 in out 1000
+C1 out 0 1e-6
+
+.TRAN 10e-6 4e-3
