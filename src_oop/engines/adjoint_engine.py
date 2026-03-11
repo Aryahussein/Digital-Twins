@@ -18,7 +18,27 @@ class AdjointEngine:
 
     def __init__(self, circuit, output_nodes):
         self.circuit = circuit
-        self.output_nodes = output_nodes if output_nodes else list(circuit.node_map.keys())
+        
+        # 1. Create a completely NEW list to prevent infinite loop appending
+        resolved_nodes = [] 
+        
+        # 2. Smart resolution to ensure dictionary keys match
+        if output_nodes:
+            for n in output_nodes:
+                if n in circuit.node_map:
+                    resolved_nodes.append(n)
+                elif str(n).isdigit() and int(n) in circuit.node_map:
+                    resolved_nodes.append(int(n))
+                elif str(n) in circuit.node_map:
+                    resolved_nodes.append(str(n))
+                else:
+                    resolved_nodes.append(n) # Fallback
+        else:
+            resolved_nodes = list(circuit.node_map.keys())
+            
+        # 3. Assign the finalized list
+        self.output_nodes = resolved_nodes
+
 
     def _solve_adjoint(self, lu, target, base_rhs=None, is_complex=False):
         """Solves the transposed matrix equation for Adjoint sensitivity analysis.

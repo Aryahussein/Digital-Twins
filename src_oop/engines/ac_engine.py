@@ -106,5 +106,7 @@ class ACEngine:
             VIs.append(VI_ac)
             if keep_lus: 
                 list_of_lus.append(lu_ac)
+
+        print(f"\n--- AC Sweep Done ---")
                 
         return frequencies, np.array(VIs), list_of_lus

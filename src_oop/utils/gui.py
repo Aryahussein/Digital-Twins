@@ -177,9 +177,14 @@ class CircuitSimulatorGUI:
             if not str(node_name).upper().startswith(mna_prefixes):
                 self.node_listbox.selection_set(tk.END)
 
-        # 2. Populate Sensitivity Component Dropdown using fast OOP dictionary
-        self.sens_cb['values'] = ["None"] + list(self.circuit.components_dict.keys())
+        available_params = set()
+        for node in self.node_names_cache:
+            # Extract whatever parameters the Adjoint Engine actually found!
+            available_params.update(self.result.get_sensitivity_parameters(node))
+            
+        self.sens_cb['values'] = ["None"] + sorted(list(available_params))
         self.sens_cb.current(0)
+        # =========================================================
 
         # 3. Route to correct tab based on analysis type
         if self.result.type == ".OP":
@@ -188,6 +193,7 @@ class CircuitSimulatorGUI:
         else:
             self.update_plot()
             self.tabs.select(self.tab_plot)
+
 
     def on_selection_change(self, event):
         """Callback for listbox and combobox selections."""

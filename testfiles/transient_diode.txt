@@ -9,3 +9,4 @@ r1 2 0 1k
 .TRAN 0.1m 50m
 
 .END
+

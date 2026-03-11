@@ -324,18 +324,36 @@ class Capacitor(Component):
         if j is not None: J_hist[j] -= I_eq
 
     def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
-        if dt is None or V_prev is None: return {}
-
+        """Calculates sensitivity w.r.t Capacitance (C)."""
         v1 = VI[self.idx_1] if self.idx_1 is not None else 0.0
         v2 = VI[self.idx_2] if self.idx_2 is not None else 0.0
+        
         p1 = PsiPhi[self.idx_1] if self.idx_1 is not None else 0.0
         p2 = PsiPhi[self.idx_2] if self.idx_2 is not None else 0.0
 
-        v1_prev = V_prev[self.idx_1] if self.idx_1 is not None else 0.0
-        v2_prev = V_prev[self.idx_2] if self.idx_2 is not None else 0.0
+        # Adjoint potential difference: (Psi_1 - Psi_2)
+        adj_diff = (p1 - p2)
 
-        dV_dt = ((v1 - v2) - (v1_prev - v2_prev)) / dt
-        return {self.name: -(p1 - p2) * dV_dt}
+        # 1. AC Analysis
+        if w != 0.0:
+            # dI/dC = j * w * V_diff
+            dI_dC = 1j * w * (v1 - v2)
+            return {self.name: -adj_diff * dI_dC}
+
+        # 2. Transient Analysis
+        elif dt is not None and V_prev is not None:
+            v1_prev = V_prev[self.idx_1] if self.idx_1 is not None else 0.0
+            v2_prev = V_prev[self.idx_2] if self.idx_2 is not None else 0.0
+            
+            # dI/dC = dV/dt using Backward Euler
+            dV_dt = ((v1 - v2) - (v1_prev - v2_prev)) / dt
+            return {self.name: -adj_diff * dV_dt}
+
+        # 3. DC Analysis
+        else:
+            # Capacitors are open circuits in DC; changing C has no effect
+            return {self.name: 0.0}
+
 
 class Inductor(Component):
     """A linear inductor (Type 'L'). Requires an MNA branch equation."""
@@ -371,6 +389,33 @@ class Inductor(Component):
         if self.branch_idx is not None:
             Y[self.branch_idx, self.branch_idx] -= req
             sources[self.branch_idx] -= v_eq
+
+    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+        """Calculates sensitivity w.r.t Inductance (L)."""
+        if self.branch_idx is None: return {}
+
+        # The current flowing through the inductor is stored at the branch index
+        i_L = VI[self.branch_idx]
+        
+        # Adjoint branch variable
+        psi_branch = PsiPhi[self.branch_idx]
+
+        # 1. AC Analysis (V_L = j * w * L * I_L)
+        if w != 0.0:
+            dVL_dL = 1j * w * i_L
+            return {self.name: psi_branch * dVL_dL}
+
+        # 2. Transient Analysis (V_L = (L/dt) * (I_L - I_prev))
+        elif dt is not None and V_prev is not None:
+            i_L_prev = V_prev[self.branch_idx]
+            
+            # dVL/dL = dI/dt using Backward Euler
+            dI_dt = (i_L - i_L_prev) / dt
+            return {self.name: psi_branch * dI_dt}
+
+        # 3. DC Analysis (Inductor is a short, L has no effect on DC bias)
+        else:
+            return {self.name: 0.0}
 
 # =====================================================================
 # NONLINEAR COMPONENTS
@@ -558,10 +603,7 @@ class OpAmp(Component):
     def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
 
     def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
-        """
-        Calculates sensitivity w.r.t the Open-Loop Gain.
-        Formula: -Psi_branch * (V_p - V_m)
-        """
+        """Calculates sensitivity w.r.t Open-Loop Gain (A)."""
         if self.branch_idx is None: return {}
 
         # Forward differential input
@@ -569,10 +611,8 @@ class OpAmp(Component):
         vm = VI[self.idx_m] if self.idx_m is not None else 0.0
         v_diff = vp - vm
 
-        # Adjoint branch current (Psi at the branch row)
+        # Adjoint branch variable
         psi_branch = PsiPhi[self.branch_idx]
 
-        # d(V_out)/d(Gain)
-        sens_gain = -(psi_branch * v_diff)
-
-        return {self.name: sens_gain}
+        # Adjoint formula: Psi_branch * (V_plus - V_minus)
+        return {self.name: psi_branch * v_diff}
