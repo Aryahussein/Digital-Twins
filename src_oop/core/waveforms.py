@@ -85,17 +85,17 @@ class Waveform:
             else:
                 return voff + vamp * np.cos(2 * np.pi * freq * t + phase_rad)
 
-        # # Extension Added: Piece-Wise Linear (PWL) support
-        # elif self.type == "PWL":
-        #     # params["TIME_VOLTAGE_PAIRS"] should be a list of tuples: [(t1, v1), (t2, v2), ...]
-        #     pairs = self.params.get("TIME_VOLTAGE_PAIRS", [(0.0, 0.0)])
-        #     
-        #     # Extract time array and voltage array
-        #     times = [p[0] for p in pairs]
-        #     volts = [p[1] for p in pairs]
-        #     
-        #     # np.interp handles the flat-lining before t[0] and after t[-1] perfectly
-        #     return np.interp(t, times, volts)
+        # Extension Added: Piece-Wise Linear (PWL) support
+        elif self.type == "PWL":
+            # params["TIME_VOLTAGE_PAIRS"] should be a list of tuples: [(t1, v1), (t2, v2), ...]
+            pairs = self.params.get("TIME_VOLTAGE_PAIRS", [(0.0, 0.0)])
+            
+            # Extract time array and voltage array
+            times = [p[0] for p in pairs]
+            volts = [p[1] for p in pairs]
+            
+            # np.interp handles the flat-lining before t[0] and after t[-1] perfectly
+            return np.interp(t, times, volts)
 
         # Default fallback for unknown or static sources
         return self.params.get("value", 0.0)

@@ -127,9 +127,12 @@ class Simulator:
             # 3. Store in Data Vault
             result = SimulationResult(".AC", freq, VI, self.circuit.node_map)
             result.list_of_lus = lus
+
+            # Run AC Adjoint Engine
+            if sensitivity:
+                adj_engine = AdjointEngine(self.circuit, self.output_nodes)
+                result.sensitivities = adj_engine.compute_sweep(VI, lus, freq_array=freq)
             
-            # Run AC Adjoint Engine (if implemented later)
-            # if sensitivity: ...
                 
             return result
 
@@ -152,6 +155,11 @@ class Simulator:
             # Store in Data Vault
             result = SimulationResult(".DC", sweep_axis, VI, self.circuit.node_map)
             result.list_of_lus = lus
+
+            # Run DC Adjoint Engine
+            if sensitivity:
+                adj_engine = AdjointEngine(self.circuit, self.output_nodes)
+                result.sensitivities = adj_engine.compute_sweep(VI, lus)
                 
             return result
             
@@ -165,6 +173,11 @@ class Simulator:
             # Store single point in Data Vault
             result = SimulationResult(".OP", np.array([0.0]), v_dc, self.circuit.node_map)
             result.list_of_lus = [lu_dc]
+
+            # Run OP Adjoint Engine
+            if sensitivity:
+                adj_engine = AdjointEngine(self.circuit, self.output_nodes)
+                result.sensitivities = adj_engine.compute_sweep(np.array([v_dc]), [lu_dc])
             
             return result
 
