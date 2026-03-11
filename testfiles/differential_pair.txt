@@ -20,3 +20,4 @@ R2 5 3 5k
 .model NMOS NMOS(Vto=1.0 Kp=100u)
 .tran 1u 5m
 .end
+
