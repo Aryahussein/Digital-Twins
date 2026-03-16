@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 # ============================================================
 
 def parse_value(val):
+
     multipliers = {
         'p': 1e-12,
         'n': 1e-9,
@@ -62,7 +63,7 @@ def evaluate_source(source_type, params, t):
 
 
 # ============================================================
-# Transient Solver
+# Transient Solver with Sensitivity
 # ============================================================
 
 def run_tran(netlist_file):
@@ -72,16 +73,23 @@ def run_tran(netlist_file):
     inductors = []
     voltage_sources = []
     opamps = []
+
     nodes = set()
+
     dt = None
     tstop = None
+
     print_requests = []
+    sens_node = None
 
     # ---------------- Parse ----------------
+
     with open(netlist_file) as f:
+
         for raw in f:
 
             line = raw.strip()
+
             if not line or line.startswith("*"):
                 continue
 
@@ -95,6 +103,15 @@ def run_tran(netlist_file):
 
             if keyword == ".print":
                 print_requests.append((tokens[1].lower(), tokens[2]))
+                continue
+
+            if keyword == ".sens":
+
+                expr = tokens[1].lower()
+
+                if expr.startswith("v(") and expr.endswith(")"):
+                    sens_node = int(expr[2:-1])
+
                 continue
 
             if keyword == ".end":
@@ -122,19 +139,24 @@ def run_tran(netlist_file):
                 nodes.update([n1, n2])
 
             elif element_type == "V":
+
                 n1, n2 = int(tokens[1]), int(tokens[2])
+
                 match = re.search(r'(\w+)\((.*?)\)', line)
+
                 source_type = match.group(1).upper()
                 params = [parse_value(p) for p in match.group(2).split()]
+
                 voltage_sources.append((name.upper(), n1, n2, source_type, params))
                 nodes.update([n1, n2])
 
             elif element_type == "O":
-                # Oname n+ n- nout gain
+
                 nplus = int(tokens[1])
                 nminus = int(tokens[2])
                 nout = int(tokens[3])
                 gain = parse_value(tokens[4])
+
                 opamps.append((name.upper(), nplus, nminus, nout, gain))
                 nodes.update([nplus, nminus, nout])
 
@@ -153,39 +175,33 @@ def run_tran(netlist_file):
 
     size = n + m + l + o
 
-    # Assign voltage source indices
-    vs_indices = {}
+    # Index assignment
     for k in range(m):
         name, n1, n2, stype, params = voltage_sources[k]
         row = n + k
         voltage_sources[k] = (name, n1, n2, stype, params, row)
-        vs_indices[name] = row
 
-    # Assign inductor indices
-    ind_indices = {}
     for k in range(l):
         name, n1, n2, value = inductors[k]
         row = n + m + k
         inductors[k] = (name, n1, n2, value, row)
-        ind_indices[name] = row
 
-    # Assign op amp indices
-    op_indices = {}
     for k in range(o):
         name, nplus, nminus, nout, gain = opamps[k]
         row = n + m + l + k
         opamps[k] = (name, nplus, nminus, nout, gain, row)
-        op_indices[name] = row
 
     x_prev = np.zeros(size)
 
-    time_vec = []
-    outputs = [[] for _ in print_requests]
-
     steps = int(tstop / dt)
 
+    time_vec = []
+    x_history = []
+
+    outputs = [[] for _ in print_requests]
+
     # ============================================================
-    # Time Loop
+    # Forward transient simulation
     # ============================================================
 
     for step in range(steps + 1):
@@ -195,33 +211,39 @@ def run_tran(netlist_file):
         G = np.zeros((size, size))
         b = np.zeros(size)
 
-        # ---- Resistors ----
+        # Resistors
         for name, n1, n2, value in resistors:
-            g = 1.0 / value
+
+            g = 1 / value
+
             if n1 != 0:
                 i = node_index[n1]
                 G[i, i] += g
+
             if n2 != 0:
                 j = node_index[n2]
                 G[j, j] += g
+
             if n1 != 0 and n2 != 0:
                 i, j = node_index[n1], node_index[n2]
                 G[i, j] -= g
                 G[j, i] -= g
 
-        # ---- Capacitors ----
+        # Capacitors (BE)
         for name, n1, n2, value in capacitors:
+
             g = value / dt
+
             v_prev = 0
 
             if n1 != 0:
-                i = node_index[n1]
-                v_prev += x_prev[i]
-                G[i, i] += g
+                v_prev += x_prev[node_index[n1]]
+                G[node_index[n1], node_index[n1]] += g
+
             if n2 != 0:
-                j = node_index[n2]
-                v_prev -= x_prev[j]
-                G[j, j] += g
+                v_prev -= x_prev[node_index[n2]]
+                G[node_index[n2], node_index[n2]] += g
+
             if n1 != 0 and n2 != 0:
                 i, j = node_index[n1], node_index[n2]
                 G[i, j] -= g
@@ -234,25 +256,7 @@ def run_tran(netlist_file):
             if n2 != 0:
                 b[node_index[n2]] -= Ieq
 
-        # ---- Inductors ----
-        for name, n1, n2, value, row in inductors:
-
-            Req = value / dt
-            Iprev = x_prev[row]
-
-            if n1 != 0:
-                i = node_index[n1]
-                G[i, row] += 1
-                G[row, i] += 1
-            if n2 != 0:
-                j = node_index[n2]
-                G[j, row] -= 1
-                G[row, j] -= 1
-
-            G[row, row] -= Req
-            b[row] += Req * Iprev
-
-        # ---- Voltage Sources ----
+        # Voltage sources
         for name, n1, n2, stype, params, row in voltage_sources:
 
             v = evaluate_source(stype, params, t)
@@ -261,6 +265,7 @@ def run_tran(netlist_file):
                 i = node_index[n1]
                 G[row, i] = 1
                 G[i, row] = 1
+
             if n2 != 0:
                 j = node_index[n2]
                 G[row, j] = -1
@@ -268,53 +273,71 @@ def run_tran(netlist_file):
 
             b[row] = v
 
-        # ---- Ideal Op Amps ----
-        for name, nplus, nminus, nout, gain, row in opamps:
-
-            if nout != 0:
-                G[row, node_index[nout]] = 1
-                G[node_index[nout], row] = 1
-
-            if nplus != 0:
-                G[row, node_index[nplus]] -= gain
-
-            if nminus != 0:
-                G[row, node_index[nminus]] += gain
-
         x = np.linalg.solve(G, b)
 
-        # ---- Store outputs ----
-        for idx, (req_type, req_target) in enumerate(print_requests):
-
-            target = req_target.upper()
-
-            if req_type == "v":
-                outputs[idx].append(x[node_index[int(target)]])
-
-            elif req_type == "i":
-                if target in vs_indices:
-                    outputs[idx].append(x[vs_indices[target]])
-                elif target in ind_indices:
-                    outputs[idx].append(x[ind_indices[target]])
-                elif target in op_indices:
-                    outputs[idx].append(x[op_indices[target]])
-
-        time_vec.append(t)
+        x_history.append(x.copy())
         x_prev = x.copy()
 
-    # ---- Subplots ----
-    fig, axes = plt.subplots(len(print_requests), 1, sharex=True,
-                             figsize=(7, 3 * len(print_requests)))
+        time_vec.append(t)
 
-    if len(print_requests) == 1:
-        axes = [axes]
+    # ============================================================
+    # Adjoint sensitivity
+    # ============================================================
 
-    for idx, (req_type, req_target) in enumerate(print_requests):
-        axes[idx].plot(time_vec, outputs[idx])
-        axes[idx].set_ylabel(f"{req_type} {req_target}")
-        axes[idx].grid(True)
+    if sens_node is not None:
 
-    axes[-1].set_xlabel("Time (s)")
-    fig.suptitle("Transient Response")
-    plt.tight_layout()
-    plt.show()
+        print("\n========== TRANSIENT SENSITIVITY ==========")
+
+        lam = np.zeros(size)
+
+        lam[node_index[sens_node]] = 1
+
+        sens = {r[0]: 0.0 for r in resistors}
+
+        for k in reversed(range(len(x_history))):
+
+            xk = x_history[k]
+
+            for name, n1, n2, value in resistors:
+
+                gprime = -1 / (value**2)
+
+                v1 = xk[node_index[n1]] if n1 != 0 else 0
+                v2 = xk[node_index[n2]] if n2 != 0 else 0
+
+                dv = v1 - v2
+
+                lam1 = lam[node_index[n1]] if n1 != 0 else 0
+                lam2 = lam[node_index[n2]] if n2 != 0 else 0
+
+                sens[name] += (lam1 - lam2) * gprime * dv
+
+        for name in sens:
+            print(f"dV({sens_node})/d{name} = {sens[name]}")
+
+    # ============================================================
+    # Plot outputs
+    # ============================================================
+
+    if print_requests:
+
+        fig, axes = plt.subplots(len(print_requests), 1, sharex=True,
+                                 figsize=(7, 3 * len(print_requests)))
+
+        if len(print_requests) == 1:
+            axes = [axes]
+
+        for idx, (req_type, req_target) in enumerate(print_requests):
+
+            target = int(req_target)
+
+            vals = [x[node_index[target]] for x in x_history]
+
+            axes[idx].plot(time_vec, vals)
+            axes[idx].set_ylabel(f"{req_type} {req_target}")
+            axes[idx].grid(True)
+
+        axes[-1].set_xlabel("Time (s)")
+
+        plt.tight_layout()
+        plt.show()

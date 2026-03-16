@@ -1,8 +1,8 @@
-V1 1 0 STEP(0 1 0)
-R1 2 0 10k
-R2 3 2 10k
-O1 1 2 3 1e5
+V1 1 0 STEP(0 1 1n)
+R1 1 2 1k
+C1 2 0 1n
 
-.tran 1e-5 0.01
-.print v 3
+.tran 1n 10u
+.print v 2
+.sens v(2)
 .end

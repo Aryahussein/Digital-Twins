@@ -16,9 +16,12 @@ def detect_analysis(netlist_file):
                 return 'tran'
     raise RuntimeError("No analysis directive (.op, .ac, or .tran) found")
 
+
+
 if __name__ == "__main__":
     analysis = detect_analysis(NETLIST_FILE)
-
+    print("Detected analysis:", analysis)
+    
     if analysis == 'dc':
         run_dc(NETLIST_FILE)
     elif analysis == 'ac':
@@ -26,4 +29,10 @@ if __name__ == "__main__":
     elif analysis == 'tran':
         run_tran(NETLIST_FILE)
 
-print("Detected analysis:", analysis)
+#non linear solver
+
+#newton
+#damped newton
+#gmin stepping
+#source stepping
+#pseudo transient analysis

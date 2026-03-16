@@ -1,6 +1,5 @@
 import sympy as sp
 
-
 def run_dc(NETLIST_FILE):
 
     def strip_comments(line):
@@ -11,20 +10,22 @@ def run_dc(NETLIST_FILE):
 
     def parse_value(val):
         val = val.lower()
+
         scale = {
+            'meg': 1e6,
             't': 1e12,
             'g': 1e9,
-            'meg': 1e6,
             'k': 1e3,
             'm': 1e-3,
             'u': 1e-6,
             'n': 1e-9,
-            'p': 1e-12,
+            'p': 1e-12
         }
 
-        for s in scale:
+        for s in sorted(scale.keys(), key=len, reverse=True):
             if val.endswith(s):
                 return float(val[:-len(s)]) * scale[s]
+
         return float(val)
 
     resistors = []
@@ -33,6 +34,7 @@ def run_dc(NETLIST_FILE):
     opamps = []
     nodes = set()
     found_op = False
+    sens_output = None   # <-- NEW
 
     # ---------------- Parse ----------------
     with open(NETLIST_FILE) as f:
@@ -48,9 +50,17 @@ def run_dc(NETLIST_FILE):
             if name == '.op':
                 found_op = True
 
+            elif name == '.sens':   # <-- NEW
+                expr = tokens[1].lower()
+                if expr.startswith('v(') and expr.endswith(')'):
+                    node_name = expr[2:-1]
+                    sens_output = ('v', node_name)
+                else:
+                    raise RuntimeError("Only .sens v(node) supported for now.")
+
             elif name.startswith('r'):
                 _, n1, n2, val = tokens
-                resistors.append((n1, n2, parse_value(val)))
+                resistors.append((tokens[0], n1, n2, parse_value(val)))  # <-- include name
                 nodes.update([n1, n2])
 
             elif name.startswith('v'):
@@ -64,7 +74,6 @@ def run_dc(NETLIST_FILE):
                 nodes.update([n1, n2])
 
             elif name.startswith('o'):
-                # Oname n+ n- nout gain
                 _, nplus, nminus, nout, gain = tokens
                 opamps.append((nplus, nminus, nout, parse_value(gain)))
                 nodes.update([nplus, nminus, nout])
@@ -87,7 +96,7 @@ def run_dc(NETLIST_FILE):
     Z = sp.zeros(size, 1)
 
     # ---------------- Stamp Resistors ----------------
-    for n1, n2, R in resistors:
+    for name, n1, n2, R in resistors:
         g = 1 / R
         if n1 != "0":
             G[node_idx[n1], node_idx[n1]] += g
@@ -124,9 +133,6 @@ def run_dc(NETLIST_FILE):
 
         row = N + Mv + k
 
-        # Output equation:
-        # Vout - A(V+ - V-) = 0
-
         if nout != "0":
             G[row, node_idx[nout]] = 1
             G[node_idx[nout], row] = 1
@@ -137,7 +143,7 @@ def run_dc(NETLIST_FILE):
         if nminus != "0":
             G[row, node_idx[nminus]] += gain
 
-    # ---------------- Solve ----------------
+    # ---------------- Solve DC ----------------
     X = G.LUsolve(Z)
 
     print("\n========== DC OPERATING POINT ==========")
@@ -149,3 +155,34 @@ def run_dc(NETLIST_FILE):
         print("\n========== VOLTAGE SOURCE CURRENTS ==========")
         for k, (name, _, _, _) in enumerate(voltages):
             print(f"I_{name} = {float(X[N+k])}")
+
+    # ---------------- Adjoint Sensitivity ----------------
+    if sens_output is not None:
+
+        print("\n========== ADJOINT SENSITIVITY ==========")
+
+        kind, target = sens_output
+
+        if target == "0":
+            raise RuntimeError("Cannot compute sensitivity of ground.")
+
+        if target not in node_idx:
+            raise RuntimeError(f"Node {target} not found.")
+
+        c = sp.zeros(size, 1)
+        c[node_idx[target]] = 1
+
+        # Solve adjoint system
+        lambda_vec = G.T.LUsolve(c)
+
+        for name, n1, n2, R in resistors:
+
+            V1 = X[node_idx[n1]] if n1 != "0" else 0
+            V2 = X[node_idx[n2]] if n2 != "0" else 0
+
+            L1 = lambda_vec[node_idx[n1]] if n1 != "0" else 0
+            L2 = lambda_vec[node_idx[n2]] if n2 != "0" else 0
+
+            sens = (1 / R**2) * (V1 - V2) * (L1 - L2)
+
+            print(f"dV{target}/d{name} = {float(sens)}")

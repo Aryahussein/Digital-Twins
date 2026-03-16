@@ -13,3 +13,4 @@ Progress -
 7. 2/5 - made a main.py which reads netlist -> and picks the solver based on the netlist. Plots bode plots using matplotlib for ac solver.
 8. 2/16 - Added ideal op amp - still linear MNA - to check with dc and ac analysis - works - tested with a simple non-inverting amp configuration.
 9. 2/18 - Added transient solver - works! - verified using an RC circuit/RLC circuits and even an ideal op amp model.
+10. 3/15 - Attempt 1 for transient adjoint sensitivity

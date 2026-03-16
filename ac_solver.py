@@ -3,10 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# ==========================================================
-# Helper functions
-# ==========================================================
-
 def strip_comments(line):
     for c in ['*', ';']:
         if c in line:
@@ -16,18 +12,27 @@ def strip_comments(line):
 
 def parse_value(val):
     val = val.lower()
+
     scale = {
-        't': 1e12, 'g': 1e9, 'meg': 1e6,
-        'k': 1e3, 'm': 1e-3,
-        'u': 1e-6, 'n': 1e-9, 'p': 1e-12
+        'meg': 1e6,
+        't': 1e12,
+        'g': 1e9,
+        'k': 1e3,
+        'm': 1e-3,
+        'u': 1e-6,
+        'n': 1e-9,
+        'p': 1e-12
     }
-    for s in scale:
+
+    for s in sorted(scale.keys(), key=len, reverse=True):
         if val.endswith(s):
             return float(val[:-len(s)]) * scale[s]
+
     return float(val)
 
 
 def generate_ac_frequencies(ac_sweep):
+
     sweep_type, npts, fstart, fstop = ac_sweep
 
     if sweep_type == 'dec':
@@ -44,27 +49,27 @@ def generate_ac_frequencies(ac_sweep):
         return np.linspace(fstart, fstop, npts)
 
     else:
-        raise ValueError(f"Unsupported AC sweep type: {sweep_type}")
+        raise RuntimeError("Unsupported AC sweep type")
 
-
-# ==========================================================
-# MAIN ENTRY FUNCTION
-# ==========================================================
 
 def run_ac(netlist_file):
 
     resistors = []
     capacitors = []
     inductors = []
-    currents = []
     voltages = []
+    currents = []
     opamps = []
     nodes = set()
-    ac_sweep = None
 
-    # ---------------- Parse Netlist ----------------
+    ac_sweep = None
+    sens_output = None
+
+    # -------- Parse Netlist --------
     with open(netlist_file) as f:
+
         for raw in f:
+
             line = strip_comments(raw)
             if not line:
                 continue
@@ -73,32 +78,36 @@ def run_ac(netlist_file):
             name = t[0].lower()
 
             if name.startswith('r'):
-                _, n1, n2, v = t
-                resistors.append((n1, n2, parse_value(v)))
+                _, n1, n2, val = t
+                resistors.append((t[0], n1, n2, parse_value(val)))
                 nodes.update([n1, n2])
 
             elif name.startswith('c'):
-                _, n1, n2, v = t
-                capacitors.append((n1, n2, parse_value(v)))
+                _, n1, n2, val = t
+                capacitors.append((n1, n2, parse_value(val)))
                 nodes.update([n1, n2])
 
             elif name.startswith('l'):
-                _, n1, n2, v = t
-                inductors.append((n1, n2, parse_value(v)))
+                _, n1, n2, val = t
+                inductors.append((n1, n2, parse_value(val)))
+                nodes.update([n1, n2])
+
+            elif name.startswith('v'):
+
+                if len(t) == 5 and t[3].lower() == "ac":
+                    _, n1, n2, _, val = t
+                else:
+                    _, n1, n2, val = t
+
+                voltages.append((t[0], n1, n2, parse_value(val)))
                 nodes.update([n1, n2])
 
             elif name.startswith('i'):
-                _, n_plus, n_minus, v = t
-                currents.append((n_plus, n_minus, parse_value(v)))
-                nodes.update([n_plus, n_minus])
-
-            elif name.startswith('v'):
-                _, n_plus, n_minus, v = t
-                voltages.append((t[0], n_plus, n_minus, parse_value(v)))
-                nodes.update([n_plus, n_minus])
+                _, n1, n2, val = t
+                currents.append((n1, n2, parse_value(val)))
+                nodes.update([n1, n2])
 
             elif name.startswith('o'):
-                # Oname n+ n- nout gain
                 _, nplus, nminus, nout, gain = t
                 opamps.append((nplus, nminus, nout, parse_value(gain)))
                 nodes.update([nplus, nminus, nout])
@@ -112,126 +121,167 @@ def run_ac(netlist_file):
                     parse_value(fstop)
                 )
 
+            elif name == '.sens':
+
+                expr = t[1].lower()
+
+                if expr.startswith("v(") and expr.endswith(")"):
+                    sens_output = expr[2:-1]
+
     if ac_sweep is None:
-        raise RuntimeError("No .ac statement found in netlist")
+        raise RuntimeError("No .ac directive found")
 
     nodes.discard("0")
     nodes = sorted(nodes)
+
+    node_idx = {n: i for i, n in enumerate(nodes)}
 
     N = len(nodes)
     Mv = len(voltages)
     Mo = len(opamps)
 
-    node_idx = {n: i for i, n in enumerate(nodes)}
-
     size = N + Mv + Mo
 
-    # ---------------- AC Solve Function ----------------
-    def solve_ac(freq_hz):
-
-        omega = 2 * np.pi * freq_hz
-        j = 1j
-
-        G = sp.zeros(size, size)
-        Z = sp.zeros(size, 1)
-
-        # -------- Resistors --------
-        for n1, n2, R in resistors:
-            g = 1 / R
-            if n1 != "0":
-                G[node_idx[n1], node_idx[n1]] += g
-            if n2 != "0":
-                G[node_idx[n2], node_idx[n2]] += g
-            if n1 != "0" and n2 != "0":
-                i, jdx = node_idx[n1], node_idx[n2]
-                G[i, jdx] -= g
-                G[jdx, i] -= g
-
-        # -------- Capacitors --------
-        for n1, n2, Cval in capacitors:
-            yc = j * omega * Cval
-            if n1 != "0":
-                G[node_idx[n1], node_idx[n1]] += yc
-            if n2 != "0":
-                G[node_idx[n2], node_idx[n2]] += yc
-            if n1 != "0" and n2 != "0":
-                i, jdx = node_idx[n1], node_idx[n2]
-                G[i, jdx] -= yc
-                G[jdx, i] -= yc
-
-        # -------- Inductors --------
-        for n1, n2, Lval in inductors:
-            yl = 1 / (j * omega * Lval)
-            if n1 != "0":
-                G[node_idx[n1], node_idx[n1]] += yl
-            if n2 != "0":
-                G[node_idx[n2], node_idx[n2]] += yl
-            if n1 != "0" and n2 != "0":
-                i, jdx = node_idx[n1], node_idx[n2]
-                G[i, jdx] -= yl
-                G[jdx, i] -= yl
-
-        # -------- Current Sources --------
-        for n_plus, n_minus, val in currents:
-            if n_plus != "0":
-                Z[node_idx[n_plus]] -= val
-            if n_minus != "0":
-                Z[node_idx[n_minus]] += val
-
-        # -------- Voltage Sources --------
-        for k, (name, n_plus, n_minus, val) in enumerate(voltages):
-            row = N + k
-
-            if n_plus != "0":
-                G[row, node_idx[n_plus]] = 1
-                G[node_idx[n_plus], row] = 1
-
-            if n_minus != "0":
-                G[row, node_idx[n_minus]] = -1
-                G[node_idx[n_minus], row] = -1
-
-            Z[row] = val
-
-        # -------- Ideal Op Amps --------
-        for k, (nplus, nminus, nout, gain) in enumerate(opamps):
-
-            row = N + Mv + k
-
-            # Vout - A(V+ - V-) = 0
-
-            if nout != "0":
-                G[row, node_idx[nout]] = 1
-                G[node_idx[nout], row] = 1
-
-            if nplus != "0":
-                G[row, node_idx[nplus]] -= gain
-
-            if nminus != "0":
-                G[row, node_idx[nminus]] += gain
-
-        X = G.LUsolve(Z)
-        return np.array(X[:N], dtype=complex).flatten()
-
-    # ---------------- Sweep ----------------
     frequencies = generate_ac_frequencies(ac_sweep)
-    out_node = nodes[-1]
+
+    out_node = sens_output if sens_output else nodes[-1]
     out_idx = node_idx[out_node]
 
     mag = []
     phase = []
 
+    sens_results = {r[0]: [] for r in resistors} if sens_output else None
+
+    # -------- Frequency Sweep --------
     for f in frequencies:
-        V = solve_ac(f)
+
+        w = 2 * np.pi * f
+        jw = 1j * w
+
+        G = np.zeros((size, size), dtype=complex)
+        Z = np.zeros(size, dtype=complex)
+
+        # Resistors
+        for name, n1, n2, R in resistors:
+
+            g = 1 / R
+
+            if n1 != "0":
+                i = node_idx[n1]
+                G[i, i] += g
+
+            if n2 != "0":
+                j = node_idx[n2]
+                G[j, j] += g
+
+            if n1 != "0" and n2 != "0":
+                i = node_idx[n1]
+                j = node_idx[n2]
+                G[i, j] -= g
+                G[j, i] -= g
+
+        # Capacitors
+        for n1, n2, C in capacitors:
+
+            yc = jw * C
+
+            if n1 != "0":
+                G[node_idx[n1], node_idx[n1]] += yc
+
+            if n2 != "0":
+                G[node_idx[n2], node_idx[n2]] += yc
+
+            if n1 != "0" and n2 != "0":
+                i = node_idx[n1]
+                j = node_idx[n2]
+                G[i, j] -= yc
+                G[j, i] -= yc
+
+        # Inductors
+        for n1, n2, L in inductors:
+
+            yl = 1 / (jw * L)
+
+            if n1 != "0":
+                G[node_idx[n1], node_idx[n1]] += yl
+
+            if n2 != "0":
+                G[node_idx[n2], node_idx[n2]] += yl
+
+            if n1 != "0" and n2 != "0":
+                i = node_idx[n1]
+                j = node_idx[n2]
+                G[i, j] -= yl
+                G[j, i] -= yl
+
+        # Current sources
+        for n1, n2, val in currents:
+
+            if n1 != "0":
+                Z[node_idx[n1]] -= val
+
+            if n2 != "0":
+                Z[node_idx[n2]] += val
+
+        # Voltage sources
+        for k, (name, n1, n2, val) in enumerate(voltages):
+
+            row = N + k
+
+            if n1 != "0":
+                G[row, node_idx[n1]] = 1
+                G[node_idx[n1], row] = 1
+
+            if n2 != "0":
+                G[row, node_idx[n2]] = -1
+                G[node_idx[n2], row] = -1
+
+            Z[row] = val
+
+        # Solve
+        X = np.linalg.solve(G, Z)
+
+        V = X[:N]
         vout = V[out_idx]
+
+        print(f, vout)
+
         mag.append(abs(vout))
         phase.append(np.angle(vout, deg=True))
 
-    # ---------------- Plot ----------------
-    fig, (ax_mag, ax_phase) = plt.subplots(
-        2, 1, sharex=True, figsize=(7, 6)
-    )
+        # -------- Adjoint Sensitivity --------
+        if sens_output:
 
-    ax_mag.semilogx(frequencies, 20 * np.log10(mag))
+            c = np.zeros(size, dtype=complex)
+            c[out_idx] = 1
+
+            lam = np.linalg.solve(G.conj().T, c)
+            lam = lam[:N]
+
+            for name, n1, n2, R in resistors:
+
+                V1 = V[node_idx[n1]] if n1 != "0" else 0
+                V2 = V[node_idx[n2]] if n2 != "0" else 0
+
+                L1 = lam[node_idx[n1]] if n1 != "0" else 0
+                L2 = lam[node_idx[n2]] if n2 != "0" else 0
+
+                sens = (1/R**2) * (V1 - V2) * (L1 - L2)
+
+                sens_results[name].append(sens)
+
+    # -------- Plotting --------
+    mag = np.array(mag)
+    phase = np.array(phase)
+    frequencies = np.array(frequencies)
+
+    mag_db = 20*np.log10(np.maximum(mag, 1e-30))
+
+    print("AC sweep points:", len(frequencies))
+
+    fig, (ax_mag, ax_phase) = plt.subplots(2,1,sharex=True,figsize=(7,6))
+
+    ax_mag.semilogx(frequencies, mag_db)
     ax_mag.set_ylabel("Magnitude (dB)")
     ax_mag.set_title(f"Bode Plot (Node {out_node})")
     ax_mag.grid(True, which="both")
@@ -243,3 +293,28 @@ def run_ac(netlist_file):
 
     plt.tight_layout()
     plt.show()
+
+    # -------- Sensitivity Plot --------
+    if sens_output is not None:
+
+        for name in sens_results:
+
+            sens_vals = np.array(sens_results[name])
+
+            sens_mag = 20*np.log10(np.maximum(np.abs(sens_vals), 1e-30))
+            sens_phase = np.angle(sens_vals, deg=True)
+
+            fig, (ax_smag, ax_sphase) = plt.subplots(2,1,sharex=True,figsize=(7,6))
+
+            ax_smag.semilogx(frequencies, sens_mag)
+            ax_smag.set_ylabel("|dV/dR| (dB)")
+            ax_smag.set_title(f"Sensitivity of V({out_node}) w.r.t {name}")
+            ax_smag.grid(True, which="both")
+
+            ax_sphase.semilogx(frequencies, sens_phase)
+            ax_sphase.set_xlabel("Frequency (Hz)")
+            ax_sphase.set_ylabel("Phase (deg)")
+            ax_sphase.grid(True, which="both")
+
+            plt.tight_layout()
+            plt.show()
