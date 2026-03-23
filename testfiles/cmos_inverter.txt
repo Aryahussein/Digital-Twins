@@ -1,0 +1,30 @@
+* CMOS Inverter Transient & DC Test Netlist
+
+* --- POWER SUPPLY ---
+VDD vdd 0 5.0
+
+* --- INPUT SIGNAL ---
+* DC value is 0V. Transient value is a pulse from 0 to 5V.
+VIN in 0 0.0 PULSE(0.0 5.0 1n 100p 100p 5n 10n)
+
+* --- THE LOAD ---
+* 50 femto-farad load capacitor
+CLOAD out 0 50f
+
+* --- TRANSISTORS ---
+* Format: M_NAME Nd Ng Ns Nb ModelName W=... L=...
+M_PULLUP out in vdd vdd P_MOD W=2u L=1u
+M_PULLDOWN out in 0 0 N_MOD W=1u L=1u
+
+* --- MODEL DEFINITIONS ---
+* Format: .MODEL ModelName ModelType Params...
+.MODEL P_MOD PMOS VTO=-0.7 MU=250e-4 C_OX=3.45e-3
+.MODEL N_MOD NMOS VTO=0.7 MU=600e-4 C_OX=3.45e-3
+
+* --- SIMULATION COMMANDS ---
+* Run a Transient analysis: 10ps steps, stopping at 20ns
+.TRAN 10p 20n
+
+* Run a DC sweep on the input voltage from 0V to 5V in 0.1V steps
+.DC VIN 0.0 5.0 0.1
+

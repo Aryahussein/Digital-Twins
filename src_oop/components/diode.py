@@ -4,6 +4,8 @@ import core.models as models
 class Diode(Component):
     """Nonlinear Diode (Type 'D') using hard-coded MNA stamping."""
 
+    IS_NONLINEAR = True
+
     def bind_nodes(self, node_map):
         """Maps Anode (n1) and Cathode (n2) to matrix indices."""
         self.idx_a = node_map.get(self.data.get("n1", 0))

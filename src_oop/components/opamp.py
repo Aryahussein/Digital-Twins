@@ -7,6 +7,8 @@ class OpAmp(Component):
     V(out, gnd) = Gain * (V(n_plus) - V(n_minus))
     """
 
+    IS_NONLINEAR = True
+
     def bind_nodes(self, node_map):
         # Input terminals
         self.idx_p = node_map.get(self.data.get("n1", 0)) # Non-inverting (+)

@@ -351,12 +351,12 @@ class NetlistParser:
         return full_lines
 
     def _attach_models(self):
-        """Binds .MODEL parameters to their corresponding component instances."""
+        """Binds .MODEL parameters and upgrades component types."""
         for name, comp in self.components.items():
             if "model" in comp:
                 m_name = comp["model"]
                 if m_name in self.models:
                     comp["model_params"] = self.models[m_name]["params"]
-                    comp["model_type"] = self.models[m_name]["type"]
+                    comp["type"] = self.models[m_name]["type"] 
                 else:
                     print(f"Warning: Model '{m_name}' not found for '{name}'")

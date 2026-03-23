@@ -45,16 +45,16 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, keep
 
 if __name__ == "__main__":
     # --- Configuration ---
-    netlist = "differential_pair" # rc_lowpass
+    netlist = "cmos_inverter" # rc_lowpass
     file_path = f"../testfiles/{netlist}.txt"
-    target_node = "3"  # The plotting tools now handle single strings or lists automatically!
-    target_component = "M1" 
+    target_node = None  # The plotting tools now handle single strings or lists automatically!
+    target_component = "" 
 
     # --- Execution ---
     circuit, result = run_simulation_core(
         file_path, 
         output_nodes=[target_node], 
-        sensitivity=True
+        sensitivity=False
     )
 
     # --- Post-Processing & Visualization ---

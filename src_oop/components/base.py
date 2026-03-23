@@ -19,6 +19,9 @@ class Component:
         idx_1 (int or None): The primary matrix index (often positive terminal).
         idx_2 (int or None): The secondary matrix index (often negative terminal).
     """
+
+    IS_NONLINEAR = False
+
     def __init__(self, name, data_dict):
         self.name = name
         self.type = data_dict.get("type")

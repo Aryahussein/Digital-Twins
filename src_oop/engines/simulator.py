@@ -46,7 +46,7 @@ class Simulator:
         self.output_nodes = output_nodes if output_nodes else list(circuit.node_map.keys())
         
         # Check flags by peeking into the object types
-        self.is_nonlinear = any(comp.type in ['D', 'M', "E"] for comp in circuit.components)
+        self.is_nonlinear = any(comp.IS_NONLINEAR for comp in circuit.components)
         self.is_complex = ".AC" in analyses
 
     def execute_analysis(self, sensitivity=False, keep_lus=False):
