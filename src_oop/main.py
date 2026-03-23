@@ -34,7 +34,7 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, keep
     circuit = Circuit(raw_components)
 
     # 3. Hand the Circuit to the Simulator Manager
-    sim = Simulator(circuit, analyses, output_nodes, ramp=1)
+    sim = Simulator(circuit, analyses, output_nodes)
 
     # 4. Execute Analysis
     result = sim.execute_analysis(sensitivity=sensitivity, keep_lus=keep_lus)

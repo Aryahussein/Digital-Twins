@@ -16,20 +16,17 @@ class TransientEngine:
     Attributes:
         circuit (Circuit): The main circuit object containing components.
         is_nonlinear (bool): Flag indicating if Newton-Raphson solvers are needed.
-        ramp (int): Legacy source-stepping parameter.
     """
 
-    def __init__(self, circuit, is_nonlinear, ramp=1):
+    def __init__(self, circuit, is_nonlinear):
         """Initializes the Transient Engine.
 
         Args:
             circuit (Circuit): The populated circuit object.
             is_nonlinear (bool): Boolean flag denoting presence of nonlinear devices.
-            ramp (int, optional): Source ramping steps. Defaults to 1.
         """
         self.circuit = circuit
         self.is_nonlinear = is_nonlinear
-        self.ramp = ramp
 
     def _solve_single_step(self, Y_base_lil, t, dt, v_prev, nonlinear_solver=None):
         """Evaluates the circuit equations for a single discrete time step.

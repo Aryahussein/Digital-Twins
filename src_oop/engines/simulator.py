@@ -26,14 +26,13 @@ class Simulator:
         analyses (dict): A dictionary of requested analyses parsed from the netlist 
             (e.g., {'.TRAN': {'stop': 1e-3, 'step': 1e-6}}).
         output_nodes (list): Target nodes for Adjoint sensitivity calculations.
-        ramp (int): Legacy source-stepping parameter for DC convergence.
         is_nonlinear (bool): Automatically detected flag indicating if Newton-Raphson 
             solvers are required.
         is_complex (bool): Automatically detected flag indicating if complex matrix 
             dtypes are required for AC analysis.
     """
 
-    def __init__(self, circuit, analyses, output_nodes=None, ramp=1):
+    def __init__(self, circuit, analyses, output_nodes=None):
         """Initializes the Simulator environment.
 
         Args:
@@ -41,12 +40,10 @@ class Simulator:
             analyses (dict): The dictionary of simulation commands.
             output_nodes (list, optional): Specific nodes to track for sensitivity. 
                 Defaults to tracking all voltage nodes.
-            ramp (int, optional): Source step parameter. Defaults to 1.
         """
         self.circuit = circuit
         self.analyses = analyses
         self.output_nodes = output_nodes if output_nodes else list(circuit.node_map.keys())
-        self.ramp = ramp
         
         # Check flags by peeking into the object types
         self.is_nonlinear = any(comp.type in ['D', 'M', "E"] for comp in circuit.components)
@@ -71,7 +68,7 @@ class Simulator:
             ValueError: If no valid analysis commands (.TRAN, .AC, .DC, .OP) are found.
         """
         # 1. Base Topology Setup
-        dc_engine = DCEngine(self.circuit, self.is_complex, self.is_nonlinear, self.ramp)
+        dc_engine = DCEngine(self.circuit, self.is_complex, self.is_nonlinear)
         Y_base = dc_engine.build_base_matrices()
 
         # ==========================================
@@ -86,7 +83,7 @@ class Simulator:
             _, v_initial = dc_engine.compute_dc_bias(Y_base)
             
             # Run Forward Engine (Removed sources_base)
-            tran_engine = TransientEngine(self.circuit, self.is_nonlinear, self.ramp)
+            tran_engine = TransientEngine(self.circuit, self.is_nonlinear)
             time, VI, lus = tran_engine.run(
                 Y_base, v_initial, t_stop, dt, keep_lus=(keep_lus or sensitivity)
             )

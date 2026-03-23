@@ -19,22 +19,19 @@ class DCEngine:
             numbers (True if an AC analysis is requested).
         is_nonlinear (bool): Flag indicating the presence of nonlinear devices
             requiring Newton-Raphson iteration.
-        ramp (int): Legacy parameter for source-stepping steps.
     """
 
-    def __init__(self, circuit, is_complex, is_nonlinear, ramp=10):
+    def __init__(self, circuit, is_complex, is_nonlinear):
         """Initializes the DC Engine.
 
         Args:
             circuit (Circuit): The fully populated circuit object.
             is_complex (bool): Whether the base matrix requires complex dtype.
             is_nonlinear (bool): Whether the circuit requires a nonlinear solver.
-            ramp (int, optional): Source ramping steps for convergence. Defaults to 10.
         """
         self.circuit = circuit
         self.is_complex = is_complex
         self.is_nonlinear = is_nonlinear
-        self.ramp = ramp
 
     def build_base_matrices(self):
         """Builds the pristine static base matrices.
