@@ -54,6 +54,7 @@ class DCEngine:
 
         for comp in self.circuit.components:
             comp.stamp_mna_connection(Y_base)
+            comp.stamp_static(Y_base)
             
         return Y_base
 
@@ -74,6 +75,8 @@ class DCEngine:
         """
         # 1. Fresh copy of the base topology
         Y_dc = Y_base_lil.copy()
+
+        print(Y_dc)
         
         dtype = complex if self.is_complex else float
         sources_dc = np.zeros(self.circuit.total_dim, dtype=dtype)
@@ -81,6 +84,7 @@ class DCEngine:
         # 3. Stamp the current t=0 / DC source values into the clean vector
         for comp in self.circuit.components:
             comp.stamp_dc(Y_dc, sources_dc)
+
         
         # 4. Solve
         if self.is_nonlinear:
