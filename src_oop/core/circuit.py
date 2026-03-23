@@ -1,12 +1,77 @@
-from core.component_factory import create_component
+"""
+Circuit Representation Module.
 
+This module provides the central `Circuit` class, which acts as the primary data 
+structure for the simulator. It includes the factory logic to instantiate 
+polymorphic components from parsed netlist dictionaries and generates the 
+Modified Nodal Analysis (MNA) matrix indexing scheme.
+"""
+
+# Import all component subclasses from the new modular package
+from components import (
+    Resistor, 
+    Capacitor, 
+    VoltageSource, 
+    Mosfet,
+    Inductor,
+    CurrentSource,
+    Diode,
+    VCCS,
+    OpAmp
+)
+
+# =====================================================================
+# COMPONENT FACTORY REGISTRY
+# =====================================================================
+_COMPONENT_REGISTRY = {
+    'R': Resistor,
+    'C': Capacitor,
+    'V': VoltageSource,
+    'M': Mosfet,
+    'L': Inductor,
+    'I': CurrentSource,
+    'D': Diode,
+    'G': VCCS,
+    'E': OpAmp
+}
+
+def create_component(name, data_dict):
+    """Instantiates the correct Component subclass based on the netlist type.
+
+    Args:
+        name (str): The unique netlist name of the component (e.g., 'R1', 'M_MAIN').
+        data_dict (dict): The parsed parameter dictionary containing at minimum
+            a 'type' key (e.g., {'type': 'R', 'n1': '1', 'n2': '0', 'value': 1000}).
+
+    Returns:
+        Component: An instantiated component object.
+
+    Raises:
+        KeyError: If the 'type' key is missing.
+        ValueError: If the component type is not recognized.
+    """
+    type_char = data_dict.get("type")
+    
+    if not type_char:
+        raise KeyError(f"Component '{name}' is missing a 'type' attribute in the parsed netlist.")
+
+    type_char = str(type_char).upper()
+    component_class = _COMPONENT_REGISTRY.get(type_char)
+    
+    if component_class is None:
+        raise ValueError(
+            f"Unknown component type '{type_char}' for '{name}'. "
+            f"Supported types are: {list(_COMPONENT_REGISTRY.keys())}"
+        )
+        
+    return component_class(name, data_dict)
+
+
+# =====================================================================
+# MAIN CIRCUIT CLASS
+# =====================================================================
 class Circuit:
     """Represents the physical circuit, containing components and matrix topology.
-
-    This class acts as the central data structure for the simulator. It converts
-    raw parsed netlist dictionaries into polymorphic component objects, identifies
-    all unique electrical nodes, and generates the Modified Nodal Analysis (MNA)
-    matrix indexing scheme.
 
     Attributes:
         components (list): A list of instantiated polymorphic component objects.
@@ -22,61 +87,45 @@ class Circuit:
             parsed_components (dict): Raw dictionary from the NetlistParser where
                 keys are component names and values are parameter dictionaries.
         """
-        # 1. Turn dictionaries into Objects!
+        # 1. Turn dictionaries into Objects using the factory!
         self.components = [
             create_component(name, data) 
             for name, data in parsed_components.items()
         ]
         
-        # Extension added: Keep a dictionary for fast O(1) lookups by name
+        # 2. Keep a dictionary for fast O(1) lookups by name
         self.components_dict = {comp.name: comp for comp in self.components}
         
-        # 2. Build the Global Matrix Index Map
+        # 3. Build the Global Matrix Index Map
         self.node_map = self._build_node_index()
         self.total_dim = len(self.node_map)
         
-        # 3. Tell every component to cache its matrix indices!
+        # 4. Tell every component to cache its matrix indices!
         for comp in self.components:
             comp.bind_nodes(self.node_map)
 
     def get_idx(self, node):
         """Retrieves the matrix row/column index for a given node.
 
-        Ground nodes (0, "0", or "GND") are not included in the MNA matrix and 
-        return None.
-
-        Args:
-            node (int or str): The name or integer ID of the circuit node.
-
-        Returns:
-            int or None: The integer matrix index, or None if the node is ground.
+        Ground nodes (0, "0", or "GND") return None.
         """
         if node == 0 or node == "0" or str(node).upper() == "GND" or node is None:
             return None
         return self.node_map.get(node)
 
     def _build_node_index(self):
-        """Scans components to build the MNA matrix coordinate map.
-
-        Assigns sequential integer indices to all unique voltage nodes first, 
-        followed by additional indices for branch currents required by MNA 
-        components (like Voltage Sources and Inductors).
-
-        Returns:
-            dict: A mapping of node/branch names to integer matrix indices.
-        """
+        """Scans components to build the MNA matrix coordinate map."""
         nodes = set()
         
         # Look through all components for their node connections
         for comp in self.components:
             for key in ["n1", "n2", "n3", "n4", 'n_d', 'n_g', 'n_s', 'n_b']:
                 val = comp.data.get(key, 0)
-                # Extension added: ensure we aren't adding string grounds
+                # Ensure we aren't adding string grounds
                 if val != 0 and val != "0" and str(val).upper() != "GND": 
                     nodes.add(val)
 
         node_list = sorted(nodes, key=str)
-        
         node_map = {}
         current_idx = 0
 
@@ -85,9 +134,8 @@ class Circuit:
             node_map[node] = current_idx
             current_idx += 1
 
-        # Map MNA current branches (Voltage sources and Inductors)
+        # Map MNA current branches (Voltage sources, Inductors, OpAmps, etc.)
         for comp in self.components:
-            # Future-proofing: Rely on component properties rather than hardcoded letters
             if comp.type in ["V", "L", "H", "F", "E"]: 
                 node_map[comp.name] = current_idx
                 current_idx += 1
@@ -95,17 +143,7 @@ class Circuit:
         return node_map
     
     def get_component(self, name):
-        """Retrieves a component object by its netlist name.
-        
-        Args:
-            name (str): The name of the component (e.g., 'R1', 'M1').
-            
-        Returns:
-            Component: The instantiated component object.
-            
-        Raises:
-            KeyError: If the component does not exist in the circuit.
-        """
+        """Retrieves a component object by its netlist name."""
         if name not in self.components_dict:
             raise KeyError(f"Component '{name}' not found in circuit.")
         return self.components_dict[name]

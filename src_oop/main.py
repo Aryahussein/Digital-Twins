@@ -45,10 +45,10 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, keep
 
 if __name__ == "__main__":
     # --- Configuration ---
-    netlist = "rc_transient"
+    netlist = "differential_pair" # rc_lowpass
     file_path = f"../testfiles/{netlist}.txt"
-    target_node = "filter_out"  # The plotting tools now handle single strings or lists automatically!
-    target_component = "C1" 
+    target_node = "3"  # The plotting tools now handle single strings or lists automatically!
+    target_component = "M1" 
 
     # --- Execution ---
     circuit, result = run_simulation_core(

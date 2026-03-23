@@ -97,7 +97,7 @@ class AdjointEngine:
                 # The impulse is ONLY applied at the very last time step!
                 target_impulse = target_node if i == num_steps - 1 else None
                 
-                # --- DRY Transposed Solve ---
+                # --- Transposed Solve ---
                 v_hat = self._solve_adjoint(list_of_lus[i], target_impulse, base_rhs=J_adj)
                 
                 adjoint_history.append(v_hat)
