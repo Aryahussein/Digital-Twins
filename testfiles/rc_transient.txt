@@ -4,3 +4,4 @@ R1 in out 1000
 C1 out 0 1e-6
 
 .TRAN 10e-6 4e-3
+

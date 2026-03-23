@@ -21,3 +21,4 @@ R2 5 3 5k
 .tran 1u 5m
 .end
 
+

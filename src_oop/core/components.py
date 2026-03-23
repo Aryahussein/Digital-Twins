@@ -43,7 +43,7 @@ class Component:
         """Stamps MNA branch topology (+1/-1) into the admittance matrix."""
         pass
         
-    def stamp_static(self, Y, sources):
+    def stamp_static(self, Y):
         """Stamps time/frequency-independent linear terms (e.g., Conductance)."""
         pass
         
@@ -120,7 +120,7 @@ class Resistor(Component):
         self.idx_1 = node_map.get(self.data.get("n1", 0))
         self.idx_2 = node_map.get(self.data.get("n2", 0))
 
-    def stamp_static(self, Y, sources):
+    def stamp_static(self, Y):
         g = 1.0 / self.value
         i, j = self.idx_1, self.idx_2
         if i is not None:
@@ -148,7 +148,7 @@ class VCCS(Component):
         self.idx_3 = node_map.get(self.data.get("n3", 0)) # Control +
         self.idx_4 = node_map.get(self.data.get("n4", 0)) # Control -
 
-    def stamp_static(self, Y, sources):
+    def stamp_static(self, Y):
         g = self.value # The transconductance
         i, j, k, l = self.idx_1, self.idx_2, self.idx_3, self.idx_4
         
@@ -163,8 +163,8 @@ class VCCS(Component):
             if l is not None: Y[j, l] += g
 
     # AC and Transient inherit from static as the gain is frequency independent.
-    def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
-    def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
+    # def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
+    # def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
 
     def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
         """
@@ -390,6 +390,19 @@ class Inductor(Component):
             Y[self.branch_idx, self.branch_idx] -= req
             sources[self.branch_idx] -= v_eq
 
+    def build_adjoint_history(self, J_hist, dt, v_hat_next, adjoint_state, method='BE'):
+        """Builds the adjoint RHS memory term for Backward Euler."""
+        if self.branch_idx is not None:
+            # The adjoint inductor memory depends on the adjoint branch current 
+            # from the 'next' time step (which we already solved in backward time)
+            i_L_hat = v_hat_next[self.branch_idx]
+            
+            # Adjoint Equivalent Voltage Source: V_eq_hat = (L/dt) * I_L_hat
+            V_eq_hat = (self.value / dt) * i_L_hat
+            
+            # Subtract from the branch equation row in the RHS history
+            J_hist[self.branch_idx] -= V_eq_hat
+
     def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
         """Calculates sensitivity w.r.t Inductance (L)."""
         if self.branch_idx is None: return {}
@@ -593,14 +606,14 @@ class OpAmp(Component):
         if self.idx_m is not None:
             Y[self.branch_idx, self.idx_m] += self.gain
 
-    def stamp_static(self, Y, sources):
-        # RHS for an ideal Op-Amp is typically 0 (homogeneous equation)
-        if self.branch_idx is not None:
-            sources[self.branch_idx] = 0.0
+    # def stamp_static(self, Y, sources):
+    #     # RHS for an ideal Op-Amp is typically 0 (homogeneous equation)
+    #     if self.branch_idx is not None:
+    #         sources[self.branch_idx] = 0.0
 
-    # AC and Transient inherit from static
-    def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
-    def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
+    # # AC and Transient inherit from static
+    # def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
+    # def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
 
     def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
         """Calculates sensitivity w.r.t Open-Loop Gain (A)."""

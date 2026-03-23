@@ -51,47 +51,90 @@ class DCEngine:
         
         # Initialize empty List-of-Lists (LIL) matrix for fast structural modifications
         Y_base = lil_matrix((self.circuit.total_dim, self.circuit.total_dim), dtype=dtype)
-        sources_base = np.zeros(self.circuit.total_dim, dtype=dtype)
 
         for comp in self.circuit.components:
             comp.stamp_mna_connection(Y_base)
-            comp.stamp_static(Y_base, sources_base)
             
-        return Y_base, sources_base
+        return Y_base
 
-    def compute_dc_bias(self, Y_base_lil, sources_base, v_ini=None, print_stuff=True):
+    def compute_dc_bias(self, Y_base_lil, v_ini=None, print_stuff=True):
         """Calculates the DC Operating Point of the circuit.
 
-        Treats all capacitors as open circuits and inductors as short circuits.
-        Invokes the cascading NonlinearSolver if diodes or transistors are present.
+        Generates a clean RHS vector from scratch, treats capacitors as open 
+        circuits and inductors as short circuits, and invokes the NR solver if needed.
 
         Args:
             Y_base_lil (scipy.sparse.lil_matrix): The static base admittance matrix.
-            sources_base (np.ndarray): The static base RHS current/voltage vector.
             v_ini (np.ndarray, optional): An initial guess vector to speed up NR 
                 convergence. Crucial for fast DC sweeps. Defaults to None (0V).
             print_stuff (bool, optional): Toggles console convergence logging. 
-                Defaults to True.
 
         Returns:
-            tuple: (lu_factorization, VI_solution_array) representing the steady
-            state of the circuit.
+            tuple: (lu_factorization, VI_solution_array)
         """
-        # Create a fresh copy of the base topology
+        # 1. Fresh copy of the base topology
         Y_dc = Y_base_lil.copy()
-        sources_dc = sources_base.copy()
         
-        # Stamp t=0 / steady-state DC source values
+        dtype = complex if self.is_complex else float
+        sources_dc = np.zeros(self.circuit.total_dim, dtype=dtype)
+        
+        # 3. Stamp the current t=0 / DC source values into the clean vector
         for comp in self.circuit.components:
             comp.stamp_dc(Y_dc, sources_dc)
         
+        # 4. Solve
         if self.is_nonlinear:
-            # If no guess is provided, start at 0V
             initial_guess = v_ini if v_ini is not None else np.zeros(self.circuit.total_dim)
-            
-            # Delegate to the cascading Newton-Raphson solver
             solver = NonlinearSolver(self.circuit, print_stuff=print_stuff)
             return solver.solve(Y_dc, sources_dc, initial_guess)
             
-        # For purely linear circuits, convert to CSC and solve immediately
         return solve_linear_circuit(Y_dc.tocsc(), sources_dc)
+
+
+    def compute_dc_sweep(self, Y_base_lil, source_name, start, stop, step, keep_lus=False):
+        """Executes a large-signal DC sweep (.DC analysis).
+
+        Args:
+            Y_base_lil (scipy.sparse.lil_matrix): The static base admittance matrix.
+            source_name (str): The netlist name of the component to sweep (e.g., 'V1').
+            start (float): The starting value of the sweep.
+            stop (float): The stopping value of the sweep.
+            step (float): The increment step size.
+            keep_lus (bool, optional): If True, stores the LU factorization for each 
+                sweep step. Defaults to False.
+
+        Returns:
+            tuple: (sweep_axis, VIs, list_of_lus)
+        """
+        target_comp = self.circuit.get_component(source_name)
+        sweep_axis = np.arange(start, stop + (step / 10.0), step)
+        VIs, list_of_lus = [], []
+        
+        print(f"\n--- Starting DC Sweep ({len(sweep_axis)} points) ---")
+
+        original_value = target_comp.value
+        current_guess = np.zeros(self.circuit.total_dim)
+
+        for idx, val in enumerate(sweep_axis):
+            if idx % max(1, len(sweep_axis)//10) == 0: 
+                print(f"Solving DC sweep point: {val:.3f}")
+
+            # Temporarily overwrite the component's value
+            target_comp.value = val
+            
+            # The solver handles building the clean RHS internally now!
+            lu_dc, VI_dc = self.compute_dc_bias(
+                Y_base_lil, 
+                v_ini=current_guess, 
+                print_stuff=False
+            )
+            
+            current_guess = VI_dc.copy() 
+            VIs.append(VI_dc)
+            if keep_lus: 
+                list_of_lus.append(lu_dc)
+
+        # Restore the component to its original state
+        target_comp.value = original_value
+
+        return sweep_axis, np.array(VIs), list_of_lus

@@ -9,7 +9,6 @@ user's requested simulation commands.
 
 from engines.dc_engine import DCEngine
 from engines.transient_engine import TransientEngine
-from engines.dc_sweep_engine import DCSweepEngine
 from engines.ac_engine import ACEngine
 from engines.adjoint_engine import AdjointEngine
 from core.results import SimulationResult
@@ -50,7 +49,7 @@ class Simulator:
         self.ramp = ramp
         
         # Check flags by peeking into the object types
-        self.is_nonlinear = any(comp.type in ['D', 'M'] for comp in circuit.components)
+        self.is_nonlinear = any(comp.type in ['D', 'M', "E"] for comp in circuit.components)
         self.is_complex = ".AC" in analyses
 
     def execute_analysis(self, sensitivity=False, keep_lus=False):
@@ -73,7 +72,7 @@ class Simulator:
         """
         # 1. Base Topology Setup
         dc_engine = DCEngine(self.circuit, self.is_complex, self.is_nonlinear, self.ramp)
-        Y_base, sources_base = dc_engine.build_base_matrices()
+        Y_base = dc_engine.build_base_matrices()
 
         # ==========================================
         # TRANSIENT ROUTE
@@ -83,20 +82,18 @@ class Simulator:
             t_stop = self.analyses[".TRAN"]["stop"]
             dt = self.analyses[".TRAN"]["step"]
             
-            # Get t=0 starting bias
-            _, v_initial = dc_engine.compute_dc_bias(Y_base, sources_base)
+            # Get t=0 starting bias (Removed sources_base)
+            _, v_initial = dc_engine.compute_dc_bias(Y_base)
             
-            # Run Forward Engine
+            # Run Forward Engine (Removed sources_base)
             tran_engine = TransientEngine(self.circuit, self.is_nonlinear, self.ramp)
             time, VI, lus = tran_engine.run(
-                Y_base, sources_base, v_initial, t_stop, dt, keep_lus=(keep_lus or sensitivity)
+                Y_base, v_initial, t_stop, dt, keep_lus=(keep_lus or sensitivity)
             )
             
-            # Store in Data Vault
             result = SimulationResult(".TRAN", time, VI, self.circuit.node_map, dt=dt)
             result.list_of_lus = lus
             
-            # Run Backward Engine
             if sensitivity:
                 adj_engine = AdjointEngine(self.circuit, self.output_nodes)
                 result.sensitivities = adj_engine.compute_transient(time, VI, lus, dt)
@@ -111,28 +108,22 @@ class Simulator:
             start = self.analyses[".AC"]["start"]
             stop = self.analyses[".AC"]["stop"]
             pts = self.analyses[".AC"]["num_points"]
-            
-            # Extension: Check for linear vs decade sweep type if the parser provides it
             sweep_type = self.analyses[".AC"].get("sweep_type", "DEC")
             
-            # 1. Get the DC linearization point (Operating Point)
-            _, v_dc = dc_engine.compute_dc_bias(Y_base, sources_base)
+            # 1. Get the DC linearization point
+            _, v_dc = dc_engine.compute_dc_bias(Y_base)
             
-            # 2. Run AC Engine
             ac_engine = ACEngine(self.circuit, self.is_nonlinear)
             freq, VI, lus = ac_engine.run(
                 Y_base, v_dc, start, stop, pts, sweep_type=sweep_type, keep_lus=(keep_lus or sensitivity)
             )
             
-            # 3. Store in Data Vault
             result = SimulationResult(".AC", freq, VI, self.circuit.node_map)
             result.list_of_lus = lus
 
-            # Run AC Adjoint Engine
             if sensitivity:
                 adj_engine = AdjointEngine(self.circuit, self.output_nodes)
                 result.sensitivities = adj_engine.compute_sweep(VI, lus, freq_array=freq)
-            
                 
             return result
 
@@ -140,23 +131,18 @@ class Simulator:
         # DC SWEEP ROUTE
         # ==========================================
         elif ".DC" in self.analyses:
-            # Extract sweep parameters from your parsed dictionary
             source_name = self.analyses[".DC"]["source"]
             start = self.analyses[".DC"]["start"]
             stop = self.analyses[".DC"]["stop"]
             step = self.analyses[".DC"]["step"]
             
-            # Run DC Sweep Engine
-            sweep_engine = DCSweepEngine(self.circuit, dc_engine)
-            sweep_axis, VI, lus = sweep_engine.run(
-                Y_base, sources_base, source_name, start, stop, step, keep_lus=(keep_lus or sensitivity)
+            sweep_axis, VI, lus = dc_engine.compute_dc_sweep(
+                Y_base, source_name, start, stop, step, keep_lus=(keep_lus or sensitivity)
             )
             
-            # Store in Data Vault
             result = SimulationResult(".DC", sweep_axis, VI, self.circuit.node_map)
             result.list_of_lus = lus
 
-            # Run DC Adjoint Engine
             if sensitivity:
                 adj_engine = AdjointEngine(self.circuit, self.output_nodes)
                 result.sensitivities = adj_engine.compute_sweep(VI, lus)
@@ -168,15 +154,16 @@ class Simulator:
         # ==========================================
         elif ".OP" in self.analyses:
             print("\nStarting DC Operating Point Analysis...")
-            lu_dc, v_dc = dc_engine.compute_dc_bias(Y_base, sources_base)
+            
+            lu_dc, v_dc = dc_engine.compute_dc_bias(Y_base)
             
             # Store single point in Data Vault
             result = SimulationResult(".OP", np.array([0.0]), v_dc, self.circuit.node_map)
             result.list_of_lus = [lu_dc]
 
-            # Run OP Adjoint Engine
             if sensitivity:
                 adj_engine = AdjointEngine(self.circuit, self.output_nodes)
+                # Wrap the 1D v_dc vector into a 2D array [v_dc] so the sweep engine can iterate it
                 result.sensitivities = adj_engine.compute_sweep(np.array([v_dc]), [lu_dc])
             
             return result

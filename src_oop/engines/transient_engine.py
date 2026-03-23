@@ -1,5 +1,5 @@
 """
-Transient Analysis Engine Module.
+Transient Analysis Engine Module
 
 This module performs time-domain numerical integration (.TRAN). It marches 
 forward in time, updating dynamic components (Capacitors, Inductors) using 
@@ -31,7 +31,7 @@ class TransientEngine:
         self.is_nonlinear = is_nonlinear
         self.ramp = ramp
 
-    def _solve_single_step(self, Y_base_lil, sources_base, t, dt, v_prev, nonlinear_solver=None):
+    def _solve_single_step(self, Y_base_lil, t, dt, v_prev, nonlinear_solver=None):
         """Evaluates the circuit equations for a single discrete time step.
 
         Args:
@@ -48,7 +48,7 @@ class TransientEngine:
         """
         # Start with a clean slate of the static topology
         Y_step = Y_base_lil.copy()
-        sources_step = sources_base.copy()
+        sources_step = np.zeros(self.circuit.total_dim)
         
         # Ask polymorphic components to stamp their C/dt terms and time-varying waveforms
         for comp in self.circuit.components:
@@ -61,7 +61,7 @@ class TransientEngine:
         # Convert to Compressed Sparse Column format right before the linear solve
         return solve_linear_circuit(Y_step.tocsc(), sources_step)
 
-    def run(self, Y_base_lil, sources_base, v_initial, t_stop, dt, keep_lus=False):
+    def run(self, Y_base_lil, v_initial, t_stop, dt, keep_lus=False):
         """Executes the forward transient integration loop.
 
         Args:
