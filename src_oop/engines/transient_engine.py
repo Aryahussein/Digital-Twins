@@ -96,7 +96,7 @@ class TransientEngine:
                 print(f"Solving forward time {t:.3e} s")
                 
             lu, VI = self._solve_single_step(
-                Y_base_lil, sources_base, t, dt, v_prev, nonlinear_solver=solver
+                Y_base_lil, t, dt, v_prev, nonlinear_solver=solver
             )
             
             # Store the results
