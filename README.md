@@ -14,3 +14,6 @@ Progress -
 8. 2/16 - Added ideal op amp - still linear MNA - to check with dc and ac analysis - works - tested with a simple non-inverting amp configuration.
 9. 2/18 - Added transient solver - works! - verified using an RC circuit/RLC circuits and even an ideal op amp model.
 10. 3/15 - Attempt 1 for transient adjoint sensitivity
+11. 3/20 - Cleaned up the code base - made seperate models for res/cap/ind/sources
+12. 3/21 - Implemented a simple diode model - non linear solver in the dc/ac/transient solvers
+13. 3/22 - Verified the NR method for non linear solver - and used a half wave rectifer and a full wave rectifier to verify the reliability of the solver.

@@ -1,188 +1,89 @@
-import sympy as sp
+import numpy as np
 
-def run_dc(NETLIST_FILE):
 
-    def strip_comments(line):
-        for c in ['*', ';']:
-            if c in line:
-                line = line.split(c, 1)[0]
-        return line.strip()
-
-    def parse_value(val):
-        val = val.lower()
-
-        scale = {
-            'meg': 1e6,
-            't': 1e12,
-            'g': 1e9,
-            'k': 1e3,
-            'm': 1e-3,
-            'u': 1e-6,
-            'n': 1e-9,
-            'p': 1e-12
-        }
-
-        for s in sorted(scale.keys(), key=len, reverse=True):
-            if val.endswith(s):
-                return float(val[:-len(s)]) * scale[s]
-
-        return float(val)
-
-    resistors = []
-    voltages = []
-    currents = []
-    opamps = []
-    nodes = set()
-    found_op = False
-    sens_output = None   # <-- NEW
-
-    # ---------------- Parse ----------------
-    with open(NETLIST_FILE) as f:
-        for raw in f:
-
-            line = strip_comments(raw)
-            if not line:
-                continue
-
-            tokens = line.split()
-            name = tokens[0].lower()
-
-            if name == '.op':
-                found_op = True
-
-            elif name == '.sens':   # <-- NEW
-                expr = tokens[1].lower()
-                if expr.startswith('v(') and expr.endswith(')'):
-                    node_name = expr[2:-1]
-                    sens_output = ('v', node_name)
-                else:
-                    raise RuntimeError("Only .sens v(node) supported for now.")
-
-            elif name.startswith('r'):
-                _, n1, n2, val = tokens
-                resistors.append((tokens[0], n1, n2, parse_value(val)))  # <-- include name
-                nodes.update([n1, n2])
-
-            elif name.startswith('v'):
-                _, n1, n2, val = tokens
-                voltages.append((tokens[0], n1, n2, parse_value(val)))
-                nodes.update([n1, n2])
-
-            elif name.startswith('i'):
-                _, n1, n2, val = tokens
-                currents.append((n1, n2, parse_value(val)))
-                nodes.update([n1, n2])
-
-            elif name.startswith('o'):
-                _, nplus, nminus, nout, gain = tokens
-                opamps.append((nplus, nminus, nout, parse_value(gain)))
-                nodes.update([nplus, nminus, nout])
-
-    if not found_op:
-        raise RuntimeError("No .op directive found")
-
-    nodes.discard("0")
-    nodes = sorted(nodes)
-
-    N = len(nodes)
-    Mv = len(voltages)
-    Mo = len(opamps)
-
-    node_idx = {n: i for i, n in enumerate(nodes)}
+def run_dc(components, node_index, N, Mv, Mo, sens_node=None, print_requests=None):
 
     size = N + Mv + Mo
 
-    G = sp.zeros(size, size)
-    Z = sp.zeros(size, 1)
+    max_iters = 100
+    tol = 1e-6
+    damping = 1.0
 
-    # ---------------- Stamp Resistors ----------------
-    for name, n1, n2, R in resistors:
-        g = 1 / R
-        if n1 != "0":
-            G[node_idx[n1], node_idx[n1]] += g
-        if n2 != "0":
-            G[node_idx[n2], node_idx[n2]] += g
-        if n1 != "0" and n2 != "0":
-            i, j = node_idx[n1], node_idx[n2]
-            G[i, j] -= g
-            G[j, i] -= g
+    x = np.zeros(size)
 
-    # ---------------- Stamp Current Sources ----------------
-    for n1, n2, val in currents:
-        if n1 != "0":
-            Z[node_idx[n1]] -= val
-        if n2 != "0":
-            Z[node_idx[n2]] += val
+    for iteration in range(max_iters):
 
-    # ---------------- Stamp Voltage Sources ----------------
-    for k, (name, n1, n2, val) in enumerate(voltages):
-        row = N + k
+        G = np.zeros((size, size))
+        b = np.zeros(size)
 
-        if n1 != "0":
-            G[row, node_idx[n1]] = 1
-            G[node_idx[n1], row] = 1
+        ctx = {
+            "node_index": node_index,
+            "analysis": "dc",
+            "N": N,
+            "Mv": Mv,
+            "x": x
+        }
 
-        if n2 != "0":
-            G[row, node_idx[n2]] = -1
-            G[node_idx[n2], row] = -1
+        for comp in components:
+            comp.stamp(G, b, ctx)
 
-        Z[row] = val
+        try:
+            x_new = np.linalg.solve(G, b)
+        except np.linalg.LinAlgError:
+            raise RuntimeError("Matrix is singular")
 
-    # ---------------- Stamp Ideal Op Amps ----------------
-    for k, (nplus, nminus, nout, gain) in enumerate(opamps):
+        err = np.max(np.abs(x_new - x))
+        residual = np.max(np.abs(G @ x_new - b))
 
-        row = N + Mv + k
+        print(f"[Newton] Iter {iteration}: err={err}, res={residual}")
 
-        if nout != "0":
-            G[row, node_idx[nout]] = 1
-            G[node_idx[nout], row] = 1
+        if err < tol and residual < tol:
+            print(f"[Newton] Converged in {iteration} iterations\n")
+            x = x_new
+            break
 
-        if nplus != "0":
-            G[row, node_idx[nplus]] -= gain
+        # -------- Adaptive damping --------
+        alpha = damping
+        x_trial = x + alpha * (x_new - x)
 
-        if nminus != "0":
-            G[row, node_idx[nminus]] += gain
+        if np.max(np.abs(x_trial)) > 1e3:
+            alpha *= 0.5
 
-    # ---------------- Solve DC ----------------
-    X = G.LUsolve(Z)
+        x = x + alpha * (x_new - x)
 
-    print("\n========== DC OPERATING POINT ==========")
-    for n in nodes:
-        idx = node_idx[n]
-        print(f"V{n} = {float(X[idx])}")
+    else:
+        raise RuntimeError("Newton did not converge")
 
-    if Mv > 0:
-        print("\n========== VOLTAGE SOURCE CURRENTS ==========")
-        for k, (name, _, _, _) in enumerate(voltages):
-            print(f"I_{name} = {float(X[N+k])}")
+    print("===== DC OPERATING POINT =====")
+    for n in node_index:
+        print(f"V({n}) = {x[node_index[n]]}")
 
-    # ---------------- Adjoint Sensitivity ----------------
-    if sens_output is not None:
+    if print_requests:
+        print("\n===== DC PRINT =====")
+        for req_type, node in print_requests:
+            if req_type.lower() == 'v':
+                print(f"V({node}) = {x[node_index[node]]}")
 
-        print("\n========== ADJOINT SENSITIVITY ==========")
+    if sens_node is not None:
 
-        kind, target = sens_output
+        print("\n===== DC SENSITIVITY =====")
 
-        if target == "0":
-            raise RuntimeError("Cannot compute sensitivity of ground.")
+        G = np.zeros((size, size))
+        b = np.zeros(size)
 
-        if target not in node_idx:
-            raise RuntimeError(f"Node {target} not found.")
+        ctx["x"] = x
 
-        c = sp.zeros(size, 1)
-        c[node_idx[target]] = 1
+        for comp in components:
+            comp.stamp(G, b, ctx)
 
-        # Solve adjoint system
-        lambda_vec = G.T.LUsolve(c)
+        c = np.zeros(size)
+        c[node_index[sens_node]] = 1
 
-        for name, n1, n2, R in resistors:
+        lam = np.linalg.solve(G.T, c)
 
-            V1 = X[node_idx[n1]] if n1 != "0" else 0
-            V2 = X[node_idx[n2]] if n2 != "0" else 0
+        for comp in components:
+            val = comp.sens_contribution(x, lam, ctx)
+            if val is not None:
+                print(f"dV({sens_node})/d{comp.name} = {val}")
 
-            L1 = lambda_vec[node_idx[n1]] if n1 != "0" else 0
-            L2 = lambda_vec[node_idx[n2]] if n2 != "0" else 0
-
-            sens = (1 / R**2) * (V1 - V2) * (L1 - L2)
-
-            print(f"dV{target}/d{name} = {float(sens)}")
+    return x
