@@ -1,0 +1,12 @@
+* Passive Tone Control Network
+V1 1 0 SINE(0 2 1k 0 0)
+* Treble path
+C1 1 2 10n
+R1 2 3 50k
+* Bass path
+R2 1 4 50k
+C2 4 0 100n
+R_Load 3 0 100k
+.TRAN 10u 5m
+
+*didn't get the best plot compared to spice becos again BE 

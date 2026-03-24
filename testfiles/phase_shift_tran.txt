@@ -1,0 +1,7 @@
+* Phase Shift Test
+V1 1 0 PULSE(0 5 1m 1n 1n 50m 100m)
+R1 1 2 1k
+C1 2 3 1u
+R2 3 0 1k
+C2 3 0 1u
+.TRAN 0.1m 150m

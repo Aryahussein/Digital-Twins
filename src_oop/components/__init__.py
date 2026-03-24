@@ -2,6 +2,9 @@ from .resistor import Resistor
 from .capacitor import Capacitor
 from .inductor import Inductor
 from .vccs import VCCS
+from .vcvs import VCVS
+from .cccs import CCCS
+from .ccvs import CCVS
 from .voltage_source import VoltageSource
 from .current_source import CurrentSource
 from .diode import Diode

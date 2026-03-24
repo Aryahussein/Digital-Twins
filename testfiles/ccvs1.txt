@@ -1,0 +1,9 @@
+*
+I1 0 N001 45
+R1 N001 N003 6
+R2 N002 N001 2
+H1 N002 0 Vx 2
+Vx N003 0 0
+.op
+.backanno
+.end

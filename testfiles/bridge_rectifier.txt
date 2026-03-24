@@ -1,0 +1,8 @@
+* Full Bridge Rectifier
+V1 1 0 SINE(0 10 50)
+D1 1 2
+D2 0 2
+D3 3 1
+D4 3 0
+R1 2 3 1k
+.TRAN 0.5ms 40ms

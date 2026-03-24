@@ -17,6 +17,9 @@ from components import (
     CurrentSource,
     Diode,
     VCCS,
+    VCVS,
+    CCCS,
+    CCVS,
     OpAmp
 )
 
@@ -33,7 +36,9 @@ _COMPONENT_REGISTRY = {
     'I': CurrentSource,
     'D': Diode,
     'G': VCCS,
-    'E': OpAmp
+    'E': VCVS,
+    'F': CCCS,
+    'H': CCVS
 }
 
 def create_component(name, data_dict):
@@ -137,7 +142,7 @@ class Circuit:
 
         # Map MNA current branches (Voltage sources, Inductors, OpAmps, etc.)
         for comp in self.components:
-            if comp.type in ["V", "L", "H", "F", "E"]: 
+            if comp.type in ["V", "L", "H", "E"]: 
                 node_map[comp.name] = current_idx
                 current_idx += 1
                 

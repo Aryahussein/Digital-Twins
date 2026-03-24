@@ -72,12 +72,23 @@ class ACEngine:
             tuple: (frequencies, VIs, list_of_lus) containing the frequency axis, 
             the complex 2D results array, and the cached matrix factorizations.
         """
-        # Extension: Support both Linear and Decade (Logarithmic) sweeps
-        if sweep_type.upper() == "LIN":
+        # Extension: Support for sweep types 
+        sweep_type_upper = sweep_type.upper()
+
+        if sweep_type_upper == "LIN":
             frequencies = np.linspace(start_freq, stop_freq, points)
-        else:
+        elif sweep_type_upper == "OCT":
+            num_octaves = np.log2(stop_freq / start_freq)
+            total_points = int(points * num_octaves)
+            frequencies = np.logspace(
+                np.log2(start_freq), np.log2(stop_freq), 
+                total_points, base=2.0
+            )
+        elif sweep_type_upper == "LIST":
+            frequencies = np.array(points)  
+        else:  # DEC is the default
             frequencies = np.logspace(np.log10(start_freq), np.log10(stop_freq), points)
-            
+
         VIs, list_of_lus = [], []
         
         # =========================================================================

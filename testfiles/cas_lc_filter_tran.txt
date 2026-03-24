@@ -1,0 +1,8 @@
+* 4th Order Low Pass Filter, BE will also overdamp this circuit, 
+* TR supposed to gives same plot as SPICE
+V1 1 0 PULSE(0 5 1m 1m 1m 100m 200m)
+L1 1 2 10m
+C1 2 0 10u
+L2 2 3 10m
+C2 3 0 10u
+.TRAN 0.1m 200m

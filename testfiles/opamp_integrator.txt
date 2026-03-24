@@ -1,0 +1,13 @@
+* Op-Amp Integrator
+
+V1 1 0 PULSE(-2 2 10m 1u 1u 50m 100m)
+
+R1 1 2 10k
+
+E1 3 0 0 2 1e5
+
+C1 2 3 1u
+
+.TRAN 1m 200m
+
+.END
