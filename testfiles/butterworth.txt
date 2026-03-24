@@ -7,3 +7,9 @@ C2 3 0 10u
 L3 3 4 10m
 C3 4 0 10u
 .TRAN 0.1m 50m
+.OPTIONS METHOD=BE
+*.OPTIONS METHOD=TR
+
+
+*okay now TR gives the same plot as SPICE
+*now we can specify integration type, IF NOT SPECIFIED TR will be used 

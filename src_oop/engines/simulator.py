@@ -84,8 +84,9 @@ class Simulator:
             
             # Run Forward Engine (Removed sources_base)
             tran_engine = TransientEngine(self.circuit, self.is_nonlinear)
+            method = self.analyses.get("OPTIONS", {}).get("method", "TR")
             time, VI, lus = tran_engine.run(
-                Y_base, v_initial, t_stop, dt, keep_lus=(keep_lus or sensitivity)
+                Y_base, v_initial, t_stop, dt, keep_lus=(keep_lus or sensitivity), method = method
             )
             
             result = SimulationResult(".TRAN", time, VI, self.circuit.node_map, dt=dt)

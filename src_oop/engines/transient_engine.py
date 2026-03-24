@@ -28,7 +28,7 @@ class TransientEngine:
         self.circuit = circuit
         self.is_nonlinear = is_nonlinear
 
-    def _solve_single_step(self, Y_base_lil, t, dt, v_prev, nonlinear_solver=None):
+    def _solve_single_step(self, Y_base_lil, t, dt, v_prev, method = 'TR',nonlinear_solver=None):
         """Evaluates the circuit equations for a single discrete time step.
 
         Args:
@@ -49,7 +49,7 @@ class TransientEngine:
         
         # Ask polymorphic components to stamp their C/dt terms and time-varying waveforms
         for comp in self.circuit.components:
-            comp.stamp_transient(Y_step, sources_step, t, dt, v_prev)
+            comp.stamp_transient(Y_step, sources_step, t, dt, v_prev,method=method)
             
         if self.is_nonlinear:
             # We use the previous timestep's result as an almost-perfect initial guess!
@@ -57,8 +57,8 @@ class TransientEngine:
 
         # Convert to Compressed Sparse Column format right before the linear solve
         return solve_linear_circuit(Y_step.tocsc(), sources_step)
-
-    def run(self, Y_base_lil, v_initial, t_stop, dt, keep_lus=False):
+    
+    def run(self, Y_base_lil, v_initial, t_stop, dt, keep_lus=False,method='TR'):
         """Executes the forward transient integration loop.
 
         Args:
@@ -93,14 +93,20 @@ class TransientEngine:
                 print(f"Solving forward time {t:.3e} s")
                 
             lu, VI = self._solve_single_step(
-                Y_base_lil, t, dt, v_prev, nonlinear_solver=solver
+                Y_base_lil, t, dt, v_prev, method=method, nonlinear_solver=solver
             )
             
             # Store the results
             results[step, :] = VI
+
+            # Update component state for TR
+            for comp in self.circuit.components:
+                if hasattr(comp, 'update_transient_state'):
+                    comp.update_transient_state(VI, method=method)
             v_prev = VI
             
             if keep_lus: 
                 list_of_lus.append(lu)
                 
         return time_array, results, list_of_lus
+    

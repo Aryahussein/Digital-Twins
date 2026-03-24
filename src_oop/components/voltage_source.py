@@ -29,7 +29,7 @@ class VoltageSource(Component):
         else:
             sources[self.branch_idx] = self.value
 
-    def stamp_transient(self, Y, sources, t, dt, v_prev):
+    def stamp_transient(self, Y, sources, t, dt, v_prev, method = 'TR'):
         if self.waveform:
             current_volts = self.waveform.get_value(t)
         else:
