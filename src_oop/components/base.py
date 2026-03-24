@@ -60,7 +60,7 @@ class Component:
         """
         pass
         
-    def stamp_transient(self, Y, sources, t, dt, v_prev): 
+    def stamp_transient(self, Y, sources, t, dt, v_prev,method='TR'): 
         """Stamps dynamic companion models (Backward Euler) and time-varying sources.
         
         Args:
@@ -69,7 +69,11 @@ class Component:
             v_prev (np.ndarray): The solution vector from the previous time step.
         """
         pass
-        
+
+    def update_transient_state(self, v_now, method='TR'):
+        "Updates internal state after each transient step (used by TR)."
+        pass
+
     def stamp_nonlinear(self, Y, sources, p_V_guess, V_guess):
         """Stamps linearized conductances (gm, gds) and equivalent currents for NR.
         

@@ -153,6 +153,13 @@ class NetlistParser:
                 "stop": self._parse_value(tokens[3]),
                 "step": self._parse_value(tokens[4])
     }
+        elif cmd == ".OPTIONS":
+            for token in tokens[1:]:
+                if '=' in token:
+                    key, val = token.split('=', 1)
+                    if key.upper() == "METHOD":
+                        self.analyses["OPTIONS"] = self.analyses.get("OPTIONS", {})
+                        self.analyses["OPTIONS"]["method"] = val.upper()
 
     def _parse_component(self, tokens):
         """Routes component parsing via the registry."""

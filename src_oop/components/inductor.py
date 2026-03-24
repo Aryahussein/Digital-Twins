@@ -24,16 +24,22 @@ class Inductor(Component):
         if self.branch_idx is not None:
             Y[self.branch_idx, self.branch_idx] -= z
 
-    def stamp_transient(self, Y, sources, t, dt, v_prev):
-        """Backward Euler Companion Model: V(t) = (L/dt)*(I(t) - I(prev))."""
-        req = self.value / dt
-        # Current is stored in the solution vector at the branch_idx
-        i_prev = v_prev[self.branch_idx] if self.branch_idx is not None else 0.0
-        v_eq = req * i_prev
+    def stamp_transient(self, Y, sources, t, dt, v_prev, method = 'TR'):
+        if self.branch_idx is None: return
+        i_prev = v_prev[self.branch_idx]
+
+        if method == 'TR':
+            req = 2.0 * self.value / dt
+            v1_prev = v_prev[self.idx_1] if self.idx_1 is not None else 0.0
+            v2_prev = v_prev[self.idx_2] if self.idx_2 is not None else 0.0
+            v_diff_prev = v1_prev - v2_prev
+            v_eq = req * i_prev + v_diff_prev
+        else:  # BE
+            req = self.value / dt
+            v_eq = req * i_prev
         
-        if self.branch_idx is not None:
-            Y[self.branch_idx, self.branch_idx] -= req
-            sources[self.branch_idx] -= v_eq
+        Y[self.branch_idx, self.branch_idx] -= req
+        sources[self.branch_idx] -= v_eq
 
     def build_adjoint_history(self, J_hist, dt, v_hat_next, adjoint_state, method='BE'):
         """Builds the adjoint RHS memory term for Backward Euler."""

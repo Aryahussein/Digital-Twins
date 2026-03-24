@@ -27,7 +27,7 @@ class CurrentSource(Component):
         val = self.waveform.get_value(0.0) if self.waveform else self.value
         self._apply_rhs_stamp(sources, val)
 
-    def stamp_transient(self, Y, sources, t, dt, v_prev):
+    def stamp_transient(self, Y, sources, t, dt, v_prev,method='TR'):
         """Stamps the time-varying value based on the waveform function."""
         val = self.waveform.get_value(t) if self.waveform else self.value
         self._apply_rhs_stamp(sources, val)
