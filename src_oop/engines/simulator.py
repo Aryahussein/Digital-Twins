@@ -94,7 +94,15 @@ class Simulator:
             
             if sensitivity:
                 adj_engine = AdjointEngine(self.circuit, self.output_nodes)
-                result.sensitivities = adj_engine.compute_transient(time, VI, lus, dt)
+                adjoint_results = {}
+
+                global_sens = adj_engine.compute_transient(time, VI, lus, dt)
+                adjoint_results.update(global_sens) # Adds "Time_Series" and "Integrated_Transient"
+
+                local_sens = adj_engine.compute_continuous_local_adjoint(time, VI, lus, dt)
+                adjoint_results["Continuous_Local_DC"] = local_sens
+
+                result.sensitivities = adjoint_results
                 
             return result
 

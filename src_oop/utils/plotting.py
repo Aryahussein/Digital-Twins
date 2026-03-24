@@ -115,7 +115,7 @@ def plot_transient(result, output_nodes=None, folder="./figures/tran", name="tra
     fig.savefig(f"{folder}/{name}.png", dpi=600)
     plt.close(fig)
 
-def plot_transient_sensitivity(result, output_node, target_component, folder="./figures/tran", name="tran_sensitivity"):
+def plot_transient_sensitivity(result, output_node, target_component, format, folder="./figures/tran", name="tran_sensitivity"):
     """Plots Transient Voltage alongside the Transient Sensitivity series over time."""
     if isinstance(output_node, (list, tuple)):
         output_node = output_node[0] 
@@ -124,7 +124,7 @@ def plot_transient_sensitivity(result, output_node, target_component, folder="./
     
     time = result.sweep_axis
     V_out = result.get_voltage(output_node)
-    sens_array = result.get_sensitivity(output_node, target_component, output_format="series")
+    sens_array = result.get_sensitivity(output_node, target_component, output_format=format)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 5), sharex=True)
     

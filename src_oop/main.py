@@ -45,7 +45,7 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, keep
 
 if __name__ == "__main__":
     # --- Configuration ---
-    netlist = "cas_lc_filter_tran" # rc_lowpass
+    netlist = "rc_transient" # rc_lowpass
     file_path = f"../testfiles/{netlist}.txt"
     target_node = 3 # The plotting tools now handle single strings or lists automatically!
     target_component = "C2" 
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     circuit, result = run_simulation_core(
         file_path, 
         output_nodes=[target_node], 
-        sensitivity=False
+        sensitivity=True
     )
 
     # --- Post-Processing & Visualization ---
@@ -76,9 +76,9 @@ if __name__ == "__main__":
         calculated_params = result.get_sensitivity_parameters(target_node)
             
         if calculated_params:
-            print(f"\n=== INTEGRATED TRANSIENT SENSITIVITIES FOR V({target_node}) ===")
+            print(f"\n=== TRANSIENT SENSITIVITIES FOR V({target_node}) ===")
             for param in calculated_params:
-                val = result.get_sensitivity(target_node, param, output_format="integrated")
+                val = result.get_sensitivity(target_node, param, output_format="integrated") # Default
                 print(f"  {param:<15} : {val:+.6e}")
             
             if target_component in calculated_params:
@@ -86,6 +86,7 @@ if __name__ == "__main__":
                     result, 
                     target_node, 
                     target_component=target_component, 
+                    format="local_dc", # Default
                     folder="../figures/tran", 
                     name=f"{netlist}_tran_sens"
                 )

@@ -135,6 +135,59 @@ class AdjointEngine:
         return {"Integrated_Transient": all_integrated, "Time_Series": all_time_series}
 
     # ====================================================
+    # CONTINUOUS LOCAL ADJOINT (The "Frozen Time" Forward Sweep)
+    # ====================================================
+    def compute_continuous_local_adjoint(self, time_array, V_forward, list_of_lus, dt):
+        """Calculates continuous sensitivity waveforms using the Local DC Adjoint method.
+
+        Steps forward in time, treating each discretized transient step as a frozen 
+        DC snapshot.
+
+        Args:
+            time_array (np.ndarray): The simulation time vector.
+            V_forward (np.ndarray): The 2D solution matrix from the forward run.
+            list_of_lus (list): Cached LU factorizations from the forward pass.
+            dt (float): The time step size used in the forward Backward Euler pass.
+
+        Returns:
+            dict: A nested dictionary mapping target nodes -> parameters -> time-series arrays.
+        """
+        all_series = {}
+        num_steps = len(time_array)
+
+        for target_node in self.output_nodes:
+            target_series = {}
+            print(f"--- Running Local DC Adjoint Sweep for '{target_node}' ---")
+            
+            for i in range(num_steps):
+                # 1. DRY Transposed Solve (The "Freezing Time" step)
+                # We use the exact same _solve_adjoint method used by AC and DC sweeps!
+                psi_local = self._solve_adjoint(list_of_lus[i], target_node)
+
+                # 2. Setup V_prev for dynamic components (Capacitors, Inductors)
+                vi_step = V_forward[i]
+                vi_prev = V_forward[i-1] if i > 0 else vi_step 
+
+                # 3. Calculate Local Gradients
+                for comp in self.circuit.components:
+                    # By passing dt and V_prev, dynamic components automatically use
+                    # their discretized DC-equivalent derivatives.
+                    step_sens = comp.get_sensitivities(VI=vi_step, PsiPhi=psi_local, dt=dt, V_prev=vi_prev)
+                    
+                    for param, val in step_sens.items():
+                        if param not in target_series: 
+                            target_series[param] = []
+                        target_series[param].append(val)
+
+            # 4. Convert to numpy arrays for fast plotting
+            for param in target_series:
+                target_series[param] = np.array(target_series[param])
+                
+            all_series[target_node] = target_series
+
+        return all_series
+
+    # ====================================================
     # STEADY-STATE SENSITIVITY (.DC, .OP, and .AC)
     # ====================================================
     def compute_sweep(self, V_forward, list_of_lus, freq_array=None):
