@@ -1,0 +1,5 @@
+* DC Sweep Test
+V1 1 0 DC 0
+R1 1 2 1k
+R2 2 0 1k
+.DC V1 0 5 0.1

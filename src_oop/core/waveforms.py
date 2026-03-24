@@ -70,7 +70,7 @@ class Waveform:
             # 4. Rest of the period
             return V1
 
-        elif self.type == "SIN" or self.type == "COS":
+        elif self.type in ["SIN", "SINE", "COS"]:
             # SPICE SIN parameters: Offset, Amplitude, Frequency, Phase Delay
             voff = self.params.get("VOFF", 0.0)
             vamp = self.params.get("VAMP", 1.0)
@@ -80,7 +80,7 @@ class Waveform:
             phase_deg = self.params.get("PHASE", 0.0)
             phase_rad = np.radians(phase_deg)
             
-            if self.type == "SIN":
+            if self.type in ["SIN", "SINE"]:
                 return voff + vamp * np.sin(2 * np.pi * freq * t + phase_rad)
             else:
                 return voff + vamp * np.cos(2 * np.pi * freq * t + phase_rad)

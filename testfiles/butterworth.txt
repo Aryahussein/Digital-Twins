@@ -1,0 +1,9 @@
+* 4th Order RLC Low Pass Filter BE will overdamp this circuit so we need TR
+V1 1 0 PWL(0 0 1m 0 1.1m 5)  
+L1 1 2 10m
+C1 2 0 10u
+L2 2 3 10m
+C2 3 0 10u
+L3 3 4 10m
+C3 4 0 10u
+.TRAN 0.1m 50m

@@ -1,0 +1,13 @@
+*
+V1 N001 0 50
+V2 N004 0 20
+V_delta N005 0 0
+V_sigma N006 0 0
+R1 N002 N005 18
+R2 N003 N006 40
+H1 N002 N001 V_sigma 20
+H2 N002 N003 V_sigma 5
+F1 N003 N004 V_delta 8
+.op
+.backanno
+.end

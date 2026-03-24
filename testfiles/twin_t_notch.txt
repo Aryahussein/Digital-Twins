@@ -1,0 +1,12 @@
+*
+V1 N001 0 AC 1
+R2 N004 0 5k
+R3 N002 N001 10k
+R4 N003 N002 10k
+C1 N004 N001 10n
+C2 N002 0 20n
+C3 N003 N004 10n
+.ac dec 500 10 100k
+.backanno
+.end
+.vout n003

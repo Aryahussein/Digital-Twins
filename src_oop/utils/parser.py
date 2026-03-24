@@ -40,7 +40,10 @@ class NetlistParser:
             'M': self._parse_mosfet,
             'V': self._parse_source, 
             'I': self._parse_source,
-            'G': self._parse_vccs
+            'G': self._parse_vccs,
+            'E': self._parse_vcvs,
+            'F': self._parse_cccs,
+            'H': self._parse_ccvs
         }
 
     # =========================================================================
@@ -118,25 +121,38 @@ class NetlistParser:
             self.analyses[".TRAN"] = {"step": dt, "stop": tstop}
             
         elif cmd == ".AC":
-            if len(tokens) < 5: 
-                self._throw_error("Expected '.AC TYPE POINTS START STOP'.")
-                
-            self.analyses[".AC"] = {
-                "sweep_type": tokens[1].upper(), # Sync: Simulator expects 'sweep_type'
-                "num_points": int(tokens[2]), 
-                "start": self._parse_value(tokens[3]), 
-                "stop": self._parse_value(tokens[4])
-            }
+            sweep_type = tokens[1].upper()
             
-        elif cmd in [".OP", ".DC"]:
-            freq = 0.0 
-            if len(tokens) > 1:
-                try:
-                    freq = self._parse_value(tokens[1])
-                except Exception:
-                    self._throw_error(f"Invalid frequency argument for .OP: '{tokens[1]}'")
-                    
-            self.analyses[".OP"] = {"freq": freq}
+            if sweep_type == "LIST":
+                freq_list = [self._parse_value(t) for t in tokens[2:]]
+                self.analyses[".AC"] = {
+                    "sweep_type": "LIST",
+                    "num_points": freq_list,
+                    "start": freq_list[0],
+                    "stop": freq_list[-1]
+                }
+            else:
+                if len(tokens) < 5: 
+                    self._throw_error("Expected '.AC TYPE POINTS START STOP'.")
+                self.analyses[".AC"] = {
+                    "sweep_type": sweep_type,
+                    "num_points": int(tokens[2]), 
+                    "start": self._parse_value(tokens[3]), 
+                    "stop": self._parse_value(tokens[4])
+                }   
+
+        elif cmd == ".OP":
+            self.analyses[".OP"] = {}
+
+        elif cmd == ".DC":
+            if len(tokens) < 5:
+                self._throw_error("Expected '.DC Source Start Stop Step'.")
+            self.analyses[".DC"] = {
+                "source": tokens[1].upper(),
+                "start": self._parse_value(tokens[2]),
+                "stop": self._parse_value(tokens[3]),
+                "step": self._parse_value(tokens[4])
+    }
 
     def _parse_component(self, tokens):
         """Routes component parsing via the registry."""
@@ -162,10 +178,14 @@ class NetlistParser:
         }
 
     def _parse_diode(self, tokens, name, type_char):
-        if len(tokens) < 4: 
-            self._throw_error(f"Missing nodes or model for diode '{name}'. Format: Name N+ N- Model/Value")
+        if len(tokens) < 3: 
+            self._throw_error(f"Missing nodes for diode '{name}'. Format: Name N+ N-")
         
         comp = {"type": type_char, "n1": self._parse_node(tokens[1]), "n2": self._parse_node(tokens[2])}
+        
+        if len(tokens) < 4:
+            return comp
+            
         token3 = tokens[3]
         
         try:
@@ -216,6 +236,37 @@ class NetlistParser:
             "n3": self._parse_node(tokens[3]), "n4": self._parse_node(tokens[4]), 
             "value": self._parse_value(tokens[5])
         }
+
+    def _parse_vcvs(self, tokens, name, type_char):
+        if len(tokens) < 6: 
+            self._throw_error(f"Malformed VCVS '{name}'. Format: Name N+ N- NC+ NC- Gain")
+        return {
+            "type": type_char, 
+            "n1": self._parse_node(tokens[1]), "n2": self._parse_node(tokens[2]), 
+            "n3": self._parse_node(tokens[3]), "n4": self._parse_node(tokens[4]), 
+            "value": self._parse_value(tokens[5])
+        }
+
+    def _parse_cccs(self, tokens, name, type_char):
+        if len(tokens) < 5: 
+            self._throw_error(f"Malformed CCCS '{name}'. Format: Name N+ N- Vcontrol Gain")
+        return {
+            "type": type_char, 
+            "n1": self._parse_node(tokens[1]), "n2": self._parse_node(tokens[2]), 
+            "controlling_source": tokens[3].upper(),
+            "value": self._parse_value(tokens[4])
+        }
+
+    def _parse_ccvs(self, tokens, name, type_char):
+        if len(tokens) < 5: 
+            self._throw_error(f"Malformed CCVS '{name}'. Format: Name N+ N- Vcontrol Transresistance")
+        return {
+            "type": type_char, 
+            "n1": self._parse_node(tokens[1]), "n2": self._parse_node(tokens[2]), 
+            "controlling_source": tokens[3].upper(),
+            "value": self._parse_value(tokens[4])
+        }
+
 
     # =========================================================================
     # STRING & VALUE PARSING UTILITIES
@@ -272,7 +323,7 @@ class NetlistParser:
             keys = ["V1", "V2", "TD", "TR", "TF", "PW", "PER"]
             return {"type": "PULSE", **dict(zip(keys, args + [0]*(7-len(args))))}
             
-        elif name in ["SIN", "COS"]:
+        elif name in ["SINE","SIN", "COS"]:
             keys = ["VOFF", "VAMP", "FREQ", "TD", "PHASE"]
             return {"type": name, **dict(zip(keys, args + [0]*(5-len(args))))}
             
@@ -289,7 +340,7 @@ class NetlistParser:
         if not value_str: return 0.0
         val_str = value_str.upper()
         multipliers = {
-            'T': 1e12, 'G': 1e9, 'MEG': 1e6, 'X': 1e6, 'K': 1e3,
+            'T': 1e12, 'G': 1e9, 'MEG': 1e6, 'K': 1e3,
             'MIL': 25.4e-6, 'M': 1e-3, 'U': 1e-6, 'N': 1e-9, 'P': 1e-12, 'F': 1e-15
         }
         match = re.match(r'^([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)(\D*)$', val_str)

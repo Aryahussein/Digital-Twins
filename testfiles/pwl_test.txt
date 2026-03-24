@@ -1,0 +1,5 @@
+* PWL Test: (time1 val1 time2 val2 ...)
+V1 1 0 PWL(0 0 10m 0 30m 5 50m 5 70m 0)
+R1 1 2 1k
+C1 2 0 10u
+.TRAN 1m 100m

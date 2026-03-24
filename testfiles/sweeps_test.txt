@@ -1,0 +1,11 @@
+* AC OCT Sweep Test
+*V1 1 0 DC 0 AC 1
+*R1 1 2 1k
+*C1 2 0 1u
+*.AC OCT 10 1 10k
+
+* AC LIST Sweep Test
+V1 1 0 DC 0 AC 1
+R1 1 2 1k
+C1 2 0 1u
+.AC LIST 10 100 1k 10k
