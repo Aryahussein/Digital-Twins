@@ -17,3 +17,7 @@ Progress -
 11. 3/20 - Cleaned up the code base - made seperate models for res/cap/ind/sources
 12. 3/21 - Implemented a simple diode model - non linear solver in the dc/ac/transient solvers
 13. 3/22 - Verified the NR method for non linear solver - and used a half wave rectifer and a full wave rectifier to verify the reliability of the solver.
+14. 3/24 - Added MOSFET level 1 model, made a inverter and checked transient waveform.
+15. 3/25 - Simulated a Differential OPAMP - simulator broken - non linearity + transient is breaking, FIX - ensure convergence using adaptive damping, add small gmin at each node to solve SINGULAR MATRIX ISSUES.
+16. 3/26 - Diff OPAMP seems to work - output characteristic looks as expected.
+![Top strip - outputs, Bottom strip - inputs](image.png)

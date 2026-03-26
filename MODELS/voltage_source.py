@@ -21,8 +21,12 @@ def evaluate_source(source_type, params, t):
         return v1 + slope * (t - tstart)
 
     if source_type == "SINE":
-        voff, vamp, freq = params
-        return voff + vamp * math.sin(2 * math.pi * freq * t)
+        voff = params[0]
+        vamp = params[1]
+        freq = params[2]
+        phase_deg = params[3] if len(params) > 3 else 0.0
+        phase_rad = math.radians(phase_deg)
+        return voff + vamp * math.sin(2 * math.pi * freq * t + phase_rad)
 
     if source_type == "PULSE":
         vlow, vhigh, tdelay, trise, tfall, ton, period = params

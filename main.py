@@ -23,13 +23,14 @@ def parse_value(val):
 
     scale = {
         'meg': 1e6,
-        't': 1e12,
-        'g': 1e9,
-        'k': 1e3,
-        'm': 1e-3,
-        'u': 1e-6,
-        'n': 1e-9,
-        'p': 1e-12
+        't':   1e12,
+        'g':   1e9,
+        'k':   1e3,
+        'm':   1e-3,
+        'u':   1e-6,
+        'n':   1e-9,
+        'p':   1e-12,
+        'f':   1e-15
     }
 
     for s in sorted(scale.keys(), key=len, reverse=True):
@@ -91,14 +92,13 @@ def detect_analysis(netlist_file):
 def build_circuit(netlist_file):
 
     components = []
-    nodes = set()
+    nodes      = set()
+    voltages   = []
+    opamps     = []
 
-    voltages = []
-    opamps = []
-
-    ac_sweep = None
-    tran_params = None
-    sens_node = None
+    ac_sweep       = None
+    tran_params    = None
+    sens_node      = None
     print_requests = []
 
     with open(netlist_file) as f:
@@ -109,7 +109,7 @@ def build_circuit(netlist_file):
             if not line:
                 continue
 
-            t = line.split()
+            t    = line.split()
             name = t[0].lower()
 
             # ---------- Passive ----------
@@ -137,8 +137,7 @@ def build_circuit(netlist_file):
             elif name.startswith('v'):
 
                 n1, n2 = t[1], t[2]
-
-                match = re.search(r'(\w+)\((.*?)\)', line)
+                match  = re.search(r'(\w+)\((.*?)\)', line)
 
                 if match:
                     source_type = match.group(1).upper()
@@ -161,6 +160,24 @@ def build_circuit(netlist_file):
                 components.append(Diode(t[0], n1, n2))
                 nodes.update([n1, n2])
 
+            # ---------- MOSFET ----------
+            elif name.startswith('m'):
+
+                _, d, g, s, b, mos_type = t[:6]
+
+                if mos_type.lower() == "nmos":
+                    from MODELS.nmos import NMOS
+                    components.append(NMOS(t[0], d, g, s, b))
+
+                elif mos_type.lower() == "pmos":
+                    from MODELS.pmos import PMOS
+                    components.append(PMOS(t[0], d, g, s, b))
+
+                else:
+                    raise RuntimeError(f"Unknown MOS type: {mos_type}")
+
+                nodes.update([d, g, s, b])
+
             # ---------- Analysis ----------
             elif name == '.tran':
                 _, dt, tstop = t
@@ -168,18 +185,27 @@ def build_circuit(netlist_file):
 
             elif name == '.ac':
                 _, sweep_type, npts, fstart, fstop = t
-                ac_sweep = (sweep_type.lower(), int(npts), parse_value(fstart), parse_value(fstop))
+                ac_sweep = (sweep_type.lower(), int(npts),
+                            parse_value(fstart), parse_value(fstop))
 
             elif name == '.sens':
-                expr = t[1].lower()
+                expr      = t[1].lower()
                 sens_node = expr[2:-1]
 
             elif name == '.print':
-                print_requests.append((t[1], t[2]))
+                # Supports both forms:
+                #   .print v 6          → one subplot, one trace
+                #   .print v 6 7 1      → one subplot, three overlaid traces
+                #
+                # t[1]  = quantity type ('v', 'i', ...)
+                # t[2:] = one or more node names (always stored as a list)
+                req_type  = t[1]
+                node_list = t[2:]
+                print_requests.append((req_type, node_list))
 
     # ---------- Node indexing ----------
     nodes.discard("0")
-    nodes = sorted(nodes)
+    nodes      = sorted(nodes)
     node_index = {n: i for i, n in enumerate(nodes)}
 
     N = len(nodes)
@@ -197,7 +223,8 @@ def build_circuit(netlist_file):
 
     Mo = len(opamps)
 
-    return components, node_index, N, Mv, Mo, ac_sweep, tran_params, sens_node, print_requests
+    return (components, node_index, N, Mv, Mo,
+            ac_sweep, tran_params, sens_node, print_requests)
 
 
 # ==========================================================
@@ -213,20 +240,13 @@ if __name__ == "__main__":
     analysis = detect_analysis(NETLIST_FILE)
     print("Detected analysis:", analysis)
 
-    components, node_index, N, Mv, Mo, ac_sweep, tran_params, sens_node, print_requests = build_circuit(NETLIST_FILE)
+    (components, node_index, N, Mv, Mo,
+     ac_sweep, tran_params, sens_node, print_requests) = build_circuit(NETLIST_FILE)
 
     # ================= DC =================
     if analysis == 'dc':
 
-        run_dc(
-            components,
-            node_index,
-            N,
-            Mv,
-            Mo,
-            sens_node,
-            print_requests
-        )
+        run_dc(components, node_index, N, Mv, Mo, sens_node, print_requests)
 
     # ================= AC =================
     elif analysis == 'ac':
@@ -236,28 +256,11 @@ if __name__ == "__main__":
 
         freqs = generate_ac_frequencies(ac_sweep)
 
-        # Run DC for operating point
-        x_op = run_dc(
-            components,
-            node_index,
-            N,
-            Mv,
-            Mo,
-            sens_node=None,
-            print_requests=None
-        )
+        x_op = run_dc(components, node_index, N, Mv, Mo,
+                      sens_node=None, print_requests=None)
 
-        run_ac(
-            components,
-            node_index,
-            N,
-            Mv,
-            Mo,
-            freqs,
-            sens_node,
-            print_requests,
-            x_op=x_op
-        )
+        run_ac(components, node_index, N, Mv, Mo,
+               freqs, sens_node, print_requests, x_op=x_op)
 
     # ================= TRAN =================
     elif analysis == 'tran':
@@ -267,14 +270,5 @@ if __name__ == "__main__":
 
         dt, tstop = tran_params
 
-        run_tran(
-            components,
-            node_index,
-            N,
-            Mv,
-            Mo,
-            dt,
-            tstop,
-            sens_node,
-            print_requests
-        )
+        run_tran(components, node_index, N, Mv, Mo,
+                 dt, tstop, sens_node, print_requests)
