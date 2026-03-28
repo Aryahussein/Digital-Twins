@@ -1,0 +1,39 @@
+* =============================================================
+* Sensitivity Test: Backward Euler vs Trapezoidal Comparison
+* =============================================================
+*
+* This circuit is designed to show the difference between BE and TR
+* integration methods on both waveform accuracy and sensitivity.
+*
+* Circuit: RC lowpass filter
+*   V1 (pulse) --> R1 (1k) --> node 2 --> C1 (1uF) --> GND
+*   Time constant: tau = R1*C1 = 1ms
+*
+* The time step (200us) is deliberately coarse — only 5 steps per
+* time constant — so the integration error is clearly visible:
+*   - BE waveforms will lag behind the true exponential
+*   - TR waveforms will track it more accurately
+*   - Sensitivity to R1 will differ by ~5%
+*   - Sensitivity to C1 will differ by ~11%
+*
+* How to use in the GUI:
+*   1. Load this file
+*   2. Select "Compare BE vs TR" from the Integration dropdown
+*   3. Click Run Simulation
+*   4. In the Waveform Plot tab, select V(2) and pick R1 or C1
+*      as the Sensitivity Target to see the curves diverge
+*   5. Check the Nodal Analysis Data tab for the numerical comparison
+*
+* =============================================================
+
+* 5V pulse: low=0V, high=5V, period=5ms (2 full cycles in 10ms)
+V1 1 0 DC 0 PULSE(0 5 0 1n 1n 2.5m 5m)
+
+* 1k resistor
+R1 1 2 1k
+
+* 1uF capacitor (tau = 1ms with R1)
+C1 2 0 1u
+
+* Coarse time step to make BE vs TR differences visible
+.TRAN 200u 10m

@@ -1,0 +1,8 @@
+* TEST 1: Voltage Divider (.OP)
+* Expected: V(2) = 5.0000V (exact)
+* Sensitivity: dV(2)/dV1 = +0.5, dV(2)/dR1 = -2.5e-3, dV(2)/dR2 = +2.5e-3
+V1 1 0 DC 10
+R1 1 2 1k
+R2 2 0 1k
+.OP
+

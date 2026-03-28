@@ -1,0 +1,11 @@
+* TEST 5: Diode Circuit (.OP)
+* Expected: V(2) ~ 0.69V (diode forward voltage)
+* I_D = (5 - 0.69)/1000 ~ 4.31 mA
+* Sensitivity: dV(2)/dD1_IS should be NEGATIVE
+*   (more IS -> more current -> more R drop -> lower VD)
+V1 1 0 DC 5
+R1 1 2 1k
+D1 2 0 DMOD
+.MODEL DMOD D (IS=1e-14)
+.OP
+

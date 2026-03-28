@@ -1,0 +1,15 @@
+* TEST 11: BE vs TR Sensitivity Comparison
+* Use "Compare BE vs TR" mode in the GUI
+* tau = R1*C1 = 1ms, dt = 200us (deliberately coarse)
+*
+* Expected differences:
+*   V1 sensitivity: ~identical (DC source)
+*   R1 sensitivity: ~5% difference between TR and BE
+*   C1 sensitivity: ~11% difference between TR and BE
+*
+* In Waveform Plot: select V(2) and pick R1 or C1 as Sensitivity Target
+* Solid line = TR (more accurate), Dashed = BE
+V1 1 0 DC 0 PULSE(0 5 0 1n 1n 2.5m 5m)
+R1 1 2 1k
+C1 2 0 1u
+.TRAN 200u 10m

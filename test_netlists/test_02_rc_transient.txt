@@ -1,0 +1,10 @@
+* TEST 2: RC Lowpass Transient
+* tau = R1*C1 = 1ms
+* Expected: V(2) charges from 0V toward 5V with exponential shape
+* At t=1ms (1 tau): V(2) ~ 3.16V
+* At t=5ms (5 tau): V(2) ~ 4.97V
+V1 1 0 DC 0 PULSE(0 5 0 1n 1n 10m 20m)
+R1 1 2 1k
+C1 2 0 1u
+.TRAN 10u 10m
+

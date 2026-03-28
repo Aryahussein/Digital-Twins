@@ -1,0 +1,11 @@
+* TEST 7: Non-Inverting OpAmp
+* Gain = 1 + R2/R1 = 1 + 10k/10k = 2.0
+* Expected: V(out) = 2.0000V (with A=100000, error ~ 20uV)
+* Virtual short: V(in) - V(fb) ~ 20uV
+V1 in 0 DC 1.0
+R1 fb 0 10k
+R2 fb out 10k
+E1 out 0 in fb 100000
+RL out 0 1MEG
+.OP
+

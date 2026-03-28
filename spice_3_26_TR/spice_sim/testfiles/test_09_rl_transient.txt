@@ -1,0 +1,10 @@
+* TEST 9: RL Step Response
+* tau = L/R = 1H/1ohm = 1s
+* Current starts at 0, rises to 1A with exponential shape
+* At t=1s (1 tau): I ~ 0.632A
+* At t=5s (5 tau): I ~ 0.993A
+* Check I(L1) in the branch current plot
+V1 1 0 DC 0 PULSE(0 1 0 1n 1n 10 20)
+R1 1 2 1
+L1 2 0 1
+.TRAN 0.05 5

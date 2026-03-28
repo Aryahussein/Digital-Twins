@@ -1,0 +1,10 @@
+* TEST 8: Inverting OpAmp
+* Gain = -R2/R1 = -10k/5k = -2.0
+* Expected: V(3) = -2.0000V
+* V(2) should be virtual ground (~20uV)
+V1 1 0 DC 1.0
+R1 1 2 5k
+R2 2 3 10k
+E1 3 0 0 2 100000
+RL 3 0 1MEG
+.OP

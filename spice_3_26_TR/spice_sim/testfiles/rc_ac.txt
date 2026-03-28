@@ -1,0 +1,5 @@
+* RC Lowpass Filter - AC Analysis
+V1 1 0 DC 0 AC 1
+R1 1 2 1k
+C1 2 0 1u
+.AC DEC 20 1 100k

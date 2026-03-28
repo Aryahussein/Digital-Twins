@@ -1,0 +1,14 @@
+* TEST 10: CMOS Inverter Transient
+* VDD=5V, PULSE input 0->5V
+* Expected: V(3) swings between 0V and 5V (inverted from input)
+* When Vin=0V: PMOS on, NMOS off -> Vout=5V
+* When Vin=5V: PMOS off, NMOS on -> Vout=0V
+V1 1 0 5
+V2 2 0 PULSE(0 5 1u 100n 100n 4u 10u)
+M1 3 2 1 1 PMOS
+M2 3 2 0 0 NMOS
+C1 3 0 1p
+.MODEL NMOS VTO=0.7 KP=100u
+.MODEL PMOS VTO=0.7 KP=50u
+.TRAN 0.1u 15u
+

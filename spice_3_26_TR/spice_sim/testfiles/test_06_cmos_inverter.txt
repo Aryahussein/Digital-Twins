@@ -1,0 +1,11 @@
+* TEST 6: CMOS Inverter (.OP)
+* VDD=5V, Vin=2.5V (midpoint)
+* Expected: V(out) ~ 0.5V (near ground, since NMOS stronger with KP=120u vs 60u)
+* Sensitivity available for: VDD, VIN, M1_W, M1_L, M1_VTO, M2_W, M2_L, M2_VTO
+VDD vdd 0 DC 5
+VIN in 0 DC 2.5
+M1 out in vdd vdd PMOD W=10u L=1u
+M2 out in 0 0 NMOD W=10u L=1u
+.MODEL NMOD NMOS (VTO=0.7 KP=120u)
+.MODEL PMOD PMOS (VTO=0.7 KP=60u)
+.OP

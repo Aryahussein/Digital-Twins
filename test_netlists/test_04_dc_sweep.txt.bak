@@ -1,0 +1,7 @@
+* TEST 4: DC Sweep (Transfer Curve)
+* Expected: V(2) = V1 * R2/(R1+R2) = V1/2
+* Linear ramp from 0V to 5V as V1 sweeps 0 to 10
+V1 1 0 DC 5
+R1 1 2 1k
+R2 2 0 1k
+.DC V1 0 10 0.5

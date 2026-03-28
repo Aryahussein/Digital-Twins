@@ -1,0 +1,10 @@
+* TEST 3: RC Lowpass AC Sweep (Bode Plot)
+* f_3dB = 1/(2*pi*R*C) = 159.15 Hz
+* Expected: -3dB at ~159 Hz, -20dB/decade rolloff above
+* At 1 Hz: gain ~ 0 dB, phase ~ 0 deg
+* At 159 Hz: gain ~ -3 dB, phase ~ -45 deg
+* At 10 kHz: gain ~ -36 dB, phase ~ -89 deg
+V1 1 0 DC 0 AC 1
+R1 1 2 1k
+C1 2 0 1u
+.AC DEC 20 1 100k

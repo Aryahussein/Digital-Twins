@@ -1,0 +1,32 @@
+* CMOS Inverter Test Circuit
+
+* Power Supply (VDD = 5V)
+V1 1 0 5
+
+* Input Signal (VIN) - Pulse from 0V to 5V
+V2 2 0 PULSE(0 5 1u 100n 100n 4u 10u)
+
+* PMOS (Pull-up)
+* Nodes: Drain(3), Gate(2), Source(1), Bulk(1)
+M1 3 2 1 1 PMOS
+
+* NMOS (Pull-down)
+* Nodes: Drain(3), Gate(2), Source(0), Bulk(0)
+M2 3 2 0 0 NMOS
+
+* Load Capacitor (1pF to see the charge/discharge curve)
+C1 3 0 1p
+
+* MOSFET Models
+* Note: The PMOS VTO is provided as positive 0.7; our stamp_mosfet code flips it to -0.7 automatically.
+.MODEL NMOS VTO=0.7 KP=100u LAMBDA=0.01 GAMMA=0.0
+.MODEL PMOS VTO=0.7 KP=50u LAMBDA=0.01 GAMMA=0.0
+
+* Transient Analysis (Simulate for 15us with 0.1us steps)
+.tran 0.1u 15u
+
+
+
+
+
+

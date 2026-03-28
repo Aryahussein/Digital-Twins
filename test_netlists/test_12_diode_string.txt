@@ -1,0 +1,13 @@
+* TEST 12: Diode String (3 diodes in series)
+* Expected: V(4) ~ 3 * 0.69V ~ 2.07V below VDD
+*   V(2) ~ 5 - 0.69 = 4.31V
+*   V(3) ~ 5 - 1.38 = 3.62V
+*   V(4) ~ 5 - 2.07 = 2.93V
+V1 1 0 DC 5
+R1 1 2 100
+D1 2 3 DMOD
+D2 3 4 DMOD
+D3 4 0 DMOD
+.MODEL DMOD D (IS=1e-14)
+.OP
+
