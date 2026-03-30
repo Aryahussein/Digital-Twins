@@ -21,3 +21,4 @@ Progress -
 15. 3/25 - Simulated a Differential OPAMP - simulator broken - non linearity + transient is breaking, FIX - ensure convergence using adaptive damping, add small gmin at each node to solve SINGULAR MATRIX ISSUES.
 16. 3/26 - Diff OPAMP seems to work - output characteristic looks as expected.
 ![Top strip - outputs, Bottom strip - inputs](image.png)
+17. 3/29 - Diff OPAMP corrected - last result the biasing was wrong - the output common mode was wrong. Corrected result - ![alt text](image-1.png)
