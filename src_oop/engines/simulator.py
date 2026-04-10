@@ -99,8 +99,10 @@ class Simulator:
                 global_sens = adj_engine.compute_transient(time, VI, lus, dt)
                 adjoint_results.update(global_sens) # Adds "Time_Series" and "Integrated_Transient"
 
-                local_sens = adj_engine.compute_continuous_local_adjoint(time, VI, lus, dt)
-                adjoint_results["Continuous_Local_DC"] = local_sens
+                # local_sens = adj_engine.compute_continuous_local_adjoint(time, VI, lus, dt)
+                # adjoint_results["Continuous_Local_DC"] = local_sens
+                cube = adj_engine.compute_continuous_local_adjoint(time, VI, lus, dt)
+                adjoint_results["Sensitivity_Cube"] = cube
 
                 result.sensitivities = adjoint_results
                 

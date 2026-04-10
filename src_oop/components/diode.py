@@ -57,3 +57,4 @@ class Diode(Component):
         
         # d(Output)/d(IS) = (Psi_anode - Psi_cathode) * d(Id)/d(IS)
         return {f"{self.name}_IS": (pa - pk) * res["dId_dIs"]}
+    

@@ -44,11 +44,12 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, keep
 
 
 if __name__ == "__main__":
+    # print("DEBUG: file_path will be:", f"../testfiles/rc_transient.txt")
     # --- Configuration ---
-    netlist = "rc_transient" # rc_lowpass
+    netlist = "nmos_inverter" # rc_lowpass
     file_path = f"../testfiles/{netlist}.txt"
-    target_node = 3 # The plotting tools now handle single strings or lists automatically!
-    target_component = "C2" 
+    target_node = "out" # The plotting tools now handle single strings or lists automatically!
+    target_component = "M1_W" 
 
     # --- Execution ---
     circuit, result = run_simulation_core(
@@ -90,6 +91,10 @@ if __name__ == "__main__":
                     folder="../figures/tran", 
                     name=f"{netlist}_tran_sens"
                 )
+        # Quick cube test
+        cube = result.sensitivities["Sensitivity_Cube"]
+        cube.print_matrix_at_time(0)
+        cube.print_matrix_at_time(-1)
 
     # ==========================================
     # AC ANALYSIS (Frequency Domain)
