@@ -9,6 +9,106 @@ and Adjoint sensitivity gradients.
 
 import numpy as np
 
+class SensitivityCube:
+    """3D sensitivity data structure
+    Organizes transient adjoint sensitivities into a cube with axis":
+        - Axis 0 (rows): parameters (R1, C1, ...)
+        - Axis 1 (cols): output nodes (what user requested)
+        - Axis 2 (depth): time steps (0, dt, 2dt, ...., T)
+    Entry [j, k, l] = partial derivative of state x_k with respect to parameter p_j at time l*dt.
+
+    Attributes:
+        time_array (np.ndarray): The 1D time axis.
+        param_names (list): Ordered parameter name strings (row labels)
+        output_nodes (list): Ordered output node names (column labels)
+        data (np.ndarray): 3D array, shape (n_params, n_outputs, n_time)
+        param_index (dict): Maps parameter name to row index.
+        output_index (dict): maps output node name to column index
+    """
+    def __init__(self, time_array, param_names, output_nodes):
+        """Allocates the cube.
+
+        Args:
+            time_array (np.ndarray): Time axis from the forward simulation.
+            param_names (list): List of all parameter names discovered 
+                from the circuit components.
+            output_nodes (list): List of output nodes the user asked for.
+        """
+        #store the axis labels 
+        self.time_array = time_array
+        self.param_names = param_names
+        self.output_nodes = output_nodes
+
+        #fill the 3D array with zeros
+        #shape: (number of parameters, number of outputs, number of time steps)
+        self.data = np.zeros((len(param_names), len(output_nodes), len(time_array)))
+
+        #identify index by names
+        self.param_index = {name: idx for idx, name in enumerate(param_names)}
+        self.output_index = {name: idx for idx, name in enumerate(output_nodes)}
+
+    def get_time_series(self, param, output_node):
+        """Returns sensitivity vs time for one (parameter,output) pair
+        
+        A 1D slice along the time axis.
+
+        Args:
+        param(str): 1D array of length n_time_steps.
+        output_node: Output node name/id.
+
+        Return:
+            np.ndarray: 1D array of length n_time_steps.
+        """
+        p = self.param_index[param]
+        o = self.output_index[output_node]
+        return self.data[p,o,:]
+    
+    def get_matrix_at_time(self,time_idx):
+        """Return the 2D sensitivity matrix S(t_k) at one time step.
+        One slice of the cube. Rows are parameters, columns are output nodes.
+
+        Args:
+            time_idx (int): The time step index.
+
+        Returns:
+            np.ndarray: 2D array of shape (n_params,n_outputs).
+        
+        """
+        return self.data[:, :, time_idx]
+    
+    def get_final_time_matrix(self):
+        """returns S(T), the sensitivity matrix at the last time step.
+        
+        Returns:
+            np.ndarray: 2D array of shape (n_params, n_outputs).
+        """
+        return self.data [:,:,-1]
+    
+    def print_matrix_at_time(self, time_idx):
+        """Prints a labeled 2D sensitivity matrix S(t_k).
+        
+        Args:
+            time_idx (int): The time step index to display.
+        """
+        t = self.time_array[time_idx]
+        print(f"\n=== Sensitivity Matrix S(t = {t:.4e} s) ===")
+        
+        # Print column headers (output nodes)
+        header = f"{'Parameter':<15}"
+        for node in self.output_nodes:
+            header += f"{'dV('+str(node)+')':<15}"
+        print(header)
+        print("-" * len(header))
+        
+        # Print each row (one per parameter)
+        for p_idx, param in enumerate(self.param_names):
+            row = f"{param:<15}"
+            for o_idx in range(len(self.output_nodes)):
+                val = self.data[p_idx, o_idx, time_idx]
+                row += f"{val:<+15.6e}"
+            print(row)
+    
+
 class SimulationResult:
     """A secure data vault that holds the results of a simulation.
 
@@ -116,9 +216,15 @@ class SimulationResult:
             return []
         
         if self.type == ".TRAN":
-            # Check the new default Continuous Local DC first, then fallback to Integrated
-            if "Continuous_Local_DC" in self.sensitivities:
-                return list(self.sensitivities["Continuous_Local_DC"].get(exact_key, {}).keys())
+            # # Check the new default Continuous Local DC first, then fallback to Integrated
+            # if "Continuous_Local_DC" in self.sensitivities:
+            #     return list(self.sensitivities["Continuous_Local_DC"].get(exact_key, {}).keys())
+            
+            #first try sensitivity cube
+            cube = self.sensitivities.get("Sensitivity_Cube")
+            if cube is not None:
+                return list(cube.param_names)
+            #Fallback to global adjoint integrated results
             elif "Integrated_Transient" in self.sensitivities:
                 return list(self.sensitivities["Integrated_Transient"].get(exact_key, {}).keys())
             return []
@@ -153,15 +259,20 @@ class SimulationResult:
         exact_key = self._resolve_node_key(node)
 
         if self.type == ".TRAN":
-            local_dc_dict = self.sensitivities.get("Continuous_Local_DC", {})
+            # local_dc_dict = self.sensitivities.get("Continuous_Local_DC", {})
+            cube = self.sensitivities.get("Sensitivity_Cube")
             time_series_dict = self.sensitivities.get("Time_Series", {})
             integrated_dict = self.sensitivities.get("Integrated_Transient", {})
 
             # 1. New Default: Continuous Local DC Adjoint Waveform
             if output_format == "local_dc":
-                if exact_key not in local_dc_dict or param not in local_dc_dict[exact_key]:
+                if cube is None:
+                    raise KeyError(f"Local DC sensitivity cube not found. Was sensitivity=True?")
+                # if exact_key not in local_dc_dict or param not in local_dc_dict[exact_key]:
+                if param not in cube.param_index or exact_key not in cube.output_index:
                     raise KeyError(f"Local DC sensitivity for node '{exact_key}' and param '{param}' not found.")
-                return local_dc_dict[exact_key][param]
+                # return local_dc_dict[exact_key][param]
+                return cube.get_time_series(param,exact_key)
 
             # 2. Global Adjoint Formats (Integrated, Series, Accumulator)
             if exact_key not in time_series_dict:

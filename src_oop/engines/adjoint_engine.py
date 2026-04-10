@@ -141,7 +141,10 @@ class AdjointEngine:
         """Calculates continuous sensitivity waveforms using the Local DC Adjoint method.
 
         Steps forward in time, treating each discretized transient step as a frozen 
-        DC snapshot.
+        DC snapshot. Results are organized into SensitivityCube.
+
+        At each time step t_k, for each output node, we perform one adjoint solve. Then every
+        component evaluates its sensitivity to produce one entry per parameter. This fills one column of s(t_k)
 
         Args:
             time_array (np.ndarray): The simulation time vector.
@@ -150,14 +153,42 @@ class AdjointEngine:
             dt (float): The time step size used in the forward Backward Euler pass.
 
         Returns:
-            dict: A nested dictionary mapping target nodes -> parameters -> time-series arrays.
+            SensitivityCube: The populated 3D sensitivity cube with axes (parameters x output_nodes x time_steps).
         """
-        all_series = {}
+        from core.results import SensitivityCube
+
+        #all_series = {}
         num_steps = len(time_array)
 
+        #discoevr all parameter names from the circuit. call get sensitivity once with dummy values
+        #to know what key each compoennt returns so we can know how many rows the cube has and in what order. 
+        dummy_vi = V_forward[0]
+        dummy_psi = np.zeros(self.circuit.total_dim)
+        all_param_names = []
+
+        for comp in self.circuit.components:
+            keys = comp.get_sensitivities(
+                VI=dummy_vi, PsiPhi=dummy_psi,dt=dt,V_prev=dummy_vi
+            ).keys()
+            for k in keys:
+                if k not in all_param_names:
+                    all_param_names.append(k)
+
+        # allocate the cube. empty sensitivity cube with zeros
+        cube = SensitivityCube(time_array,all_param_names,self.output_nodes)
+
+        #Fill the cube one column at a time. 
+        #For each output node, march through every time step. 
+        #Ate ach step, ask every compoennet for its sensitivities
+        #Write each value into the cube at [param_row,output_col,time_idx].
+        
         for target_node in self.output_nodes:
-            target_series = {}
-            print(f"--- Running Local DC Adjoint Sweep for '{target_node}' ---")
+            #target_series = {}
+            #print(f"--- Running Local DC Adjoint Sweep for '{target_node}' ---")
+            print(f"---Building Sensitivity Cube for '{target_node}'---")
+
+            #look up the column index for this output node once
+            o_idx = cube.output_index[target_node]
             
             for i in range(num_steps):
                 # 1. DRY Transposed Solve (The "Freezing Time" step)
@@ -175,17 +206,22 @@ class AdjointEngine:
                     step_sens = comp.get_sensitivities(VI=vi_step, PsiPhi=psi_local, dt=dt, V_prev=vi_prev)
                     
                     for param, val in step_sens.items():
-                        if param not in target_series: 
-                            target_series[param] = []
-                        target_series[param].append(val)
+                        p_idx = cube.param_index[param]
+                        cube.data[p_idx,o_idx,i] = val
 
-            # 4. Convert to numpy arrays for fast plotting
-            for param in target_series:
-                target_series[param] = np.array(target_series[param])
+
+            #             if param not in target_series: 
+            #                 target_series[param] = []
+            #             target_series[param].append(val)
+
+            # # 4. Convert to numpy arrays for fast plotting
+            # for param in target_series:
+            #     target_series[param] = np.array(target_series[param])
                 
-            all_series[target_node] = target_series
+            # all_series[target_node] = target_series
 
-        return all_series
+        #return all_series
+        return cube
 
     # ====================================================
     # STEADY-STATE SENSITIVITY (.DC, .OP, and .AC)
