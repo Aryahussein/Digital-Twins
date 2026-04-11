@@ -7,6 +7,7 @@ shared base class with a POLARITY constant to handle the symmetric equations.
 from .base import Component
 import core.models as models
 import warnings
+import numpy as np
 
 
 class Mosfet(Component):
@@ -113,6 +114,52 @@ class Mosfet(Component):
             f"{self.name}_VTO": adj_factor * dId_dVTO
         }
 
+    def get_noise_sources(self, VI, w):
+        """MOSFET noise sources.
+
+        Thermal channel noise:  S_id = 4kT * (2/3) * gm   A²/Hz
+        Flicker (1/f) noise:    S_id = KF * Id / (Cox*L^2 * f)  A²/Hz
+          where KF defaults to 1e-24 A²·s/F if not specified in model.
+
+        Both are current sources from drain to source.
+        """
+        import core.constants as const, core.models as models
+
+        vd = float(np.real(VI[self.idx_d])) if self.idx_d is not None else 0.0
+        vg = float(np.real(VI[self.idx_g])) if self.idx_g is not None else 0.0
+        vs = float(np.real(VI[self.idx_s])) if self.idx_s is not None else 0.0
+
+        vgs = self.POLARITY * (vg - vs)
+        vds = self.POLARITY * (vd - vs)
+        res = models.evaluate_mosfet_level1(vgs, vds, self.VTO, self.Bn)
+        gm = float(res['gm'])
+        Id = abs(float(res['I_D']))
+
+        sources = []
+
+        # Thermal channel noise (van der Ziel model, gamma=2/3)
+        S_thermal = 4.0 * const.kb * const.T * (2.0/3.0) * gm
+        sources.append({
+            'nodes': (self.idx_d, self.idx_s),
+            'S': float(S_thermal),
+            'label': f'{self.name}_thermal'
+        })
+
+        # Flicker noise (1/f): S = KF*Id^AF/(Cox*L^2*f)
+        params = self.data.get('model_params', {})
+        KF  = float(params.get('KF', 1e-24))
+        AF  = float(params.get('AF', 1.0))
+        cox = float(params.get('C_OX', 3.45e-3))
+        f   = w / (2.0 * 3.14159265) if w > 0 else 1.0
+        S_flicker = KF * (Id ** AF) / (cox * self.L**2 * f)
+        sources.append({
+            'nodes': (self.idx_d, self.idx_s),
+            'S': float(S_flicker),
+            'label': f'{self.name}_flicker'
+        })
+
+        return sources
+
 
 class NMOS(Mosfet):
     """N-Channel MOSFET."""
@@ -122,3 +169,4 @@ class NMOS(Mosfet):
 class PMOS(Mosfet):
     """P-Channel MOSFET."""
     POLARITY = -1.0
+

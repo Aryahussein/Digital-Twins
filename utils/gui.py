@@ -107,6 +107,57 @@ class CircuitSimulatorGUI:
         self.data_text = tk.Text(self.tab_data, font=("Courier", 10))
         self.data_text.pack(fill=tk.BOTH, expand=True)
 
+        # --- Tab 3: Noise Analysis ---
+        self.tab_noise = tk.Frame(self.tabs)
+        self.tabs.add(self.tab_noise, text="Noise Analysis")
+
+        # Noise plot (top) + summary table (bottom)
+        noise_pane = tk.PanedWindow(self.tab_noise, orient=tk.VERTICAL)
+        noise_pane.pack(fill=tk.BOTH, expand=True)
+
+        noise_plot_frame = tk.Frame(noise_pane)
+        noise_pane.add(noise_plot_frame, stretch="always")
+        self.noise_fig  = Figure(figsize=(5, 3), dpi=100)
+        self.noise_canvas = FigureCanvasTkAgg(self.noise_fig, master=noise_plot_frame)
+        self.noise_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.noise_toolbar = NavigationToolbar2Tk(self.noise_canvas, noise_plot_frame)
+        self.noise_toolbar.update()
+
+        noise_text_frame = tk.Frame(noise_pane)
+        noise_pane.add(noise_text_frame, stretch="never")
+        self.noise_text = tk.Text(noise_text_frame, font=("Courier", 9), height=10)
+        noise_scroll = tk.Scrollbar(noise_text_frame, command=self.noise_text.yview)
+        self.noise_text.configure(yscrollcommand=noise_scroll.set)
+        noise_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.noise_text.pack(fill=tk.BOTH, expand=True)
+
+        # --- Tab 4: Elmore Delay / Moments / AWE ---
+        self.tab_mor = tk.Frame(self.tabs)
+        self.tabs.add(self.tab_mor, text="Elmore / AWE")
+
+        mor_ctrl = tk.Frame(self.tab_mor, bg="#f0f0f0")
+        mor_ctrl.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+
+        self.btn_elmore = tk.Button(mor_ctrl, text="Run Elmore Delay",
+                                    command=self.run_elmore, width=18, bg="#ddeeff",
+                                    state=tk.DISABLED)
+        self.btn_elmore.pack(side=tk.LEFT, padx=5)
+
+        tk.Label(mor_ctrl, text="AWE order:", bg="#f0f0f0").pack(side=tk.LEFT, padx=(15,2))
+        self.awe_order_var = tk.StringVar(value="4")
+        tk.Spinbox(mor_ctrl, from_=1, to=10, textvariable=self.awe_order_var,
+                   width=4).pack(side=tk.LEFT)
+        tk.Label(mor_ctrl, text="Output node:", bg="#f0f0f0").pack(side=tk.LEFT, padx=(10,2))
+        self.awe_node_var = tk.StringVar(value="")
+        tk.Entry(mor_ctrl, textvariable=self.awe_node_var, width=6).pack(side=tk.LEFT)
+        self.btn_awe = tk.Button(mor_ctrl, text="Run AWE",
+                                 command=self.run_awe, width=12, bg="#ddeeff",
+                                 state=tk.DISABLED)
+        self.btn_awe.pack(side=tk.LEFT, padx=5)
+
+        self.mor_text = tk.Text(self.tab_mor, font=("Courier", 10))
+        self.mor_text.pack(fill=tk.BOTH, expand=True)
+
         self.current_file_path = None
         self.node_names_cache = []
 
@@ -188,6 +239,16 @@ class CircuitSimulatorGUI:
         if not self.result:
             return
 
+        # Enable Elmore/AWE buttons
+        self.btn_elmore.config(state=tk.NORMAL)
+        self.btn_awe.config(state=tk.NORMAL)
+
+        # Pre-fill AWE node with first voltage node
+        for k in self.result.node_map:
+            if not str(k).upper().startswith(('V','L','E','H','F')):
+                self.awe_node_var.set(str(k))
+                break
+
         # 1. Populate Node Listbox
         self.node_listbox.delete(0, tk.END)
         self.node_names_cache = []
@@ -216,6 +277,9 @@ class CircuitSimulatorGUI:
         if self.result.type == ".OP":
             self.update_data_tab_op()
             self.tabs.select(self.tab_data)
+        elif self.result.type == ".NOISE":
+            self.update_noise_tab()
+            self.tabs.select(self.tab_noise)
         else:
             self.update_data_tab_transient()
             self.update_plot()
@@ -574,3 +638,237 @@ class CircuitSimulatorGUI:
 
         self.fig.tight_layout()
         self.canvas.draw()
+    # ─────────────────────────────────────────────────────────────────────
+    # NOISE TAB
+    # ─────────────────────────────────────────────────────────────────────
+
+    def update_noise_tab(self):
+        """Plots the noise spectrum and fills the summary table."""
+        if not self.result or not hasattr(self.result, 'noise') or not self.result.noise:
+            self.noise_text.delete(1.0, tk.END)
+            self.noise_text.insert(tk.END, "No noise data available.\nRun a .NOISE netlist to see results.")
+            return
+
+        nr     = self.result.noise
+        freqs  = nr.frequencies
+        S_v    = nr.S_v
+        S_sqrt = nr.S_v_sqrt
+
+        # ── Plot ──────────────────────────────────────────────────────
+        self.noise_fig.clf()
+        ax1 = self.noise_fig.add_subplot(211)
+        ax2 = self.noise_fig.add_subplot(212, sharex=ax1)
+
+        # Total noise PSD
+        ax1.loglog(freqs, S_v, lw=2, color='steelblue', label='Total S_v (V²/Hz)')
+        colors = ['tomato','darkorange','seagreen','purple','sienna','teal']
+        for ci, (label, S_arr) in enumerate(sorted(nr.contributions.items(),
+                                             key=lambda x: -x[1][-1])):
+            ax1.loglog(freqs, S_arr, lw=1.2, ls='--',
+                       color=colors[ci % len(colors)], label=label, alpha=0.8)
+
+        ax1.set_ylabel("S_v (V²/Hz)")
+        ax1.set_title("Output Noise Spectral Density")
+        ax1.legend(loc='upper right', fontsize=7)
+        ax1.grid(True, which='both', ls='--', alpha=0.4)
+
+        # V/√Hz form
+        ax2.loglog(freqs, S_sqrt, lw=2, color='steelblue')
+        ax2.set_ylabel("V/√Hz")
+        ax2.set_xlabel("Frequency (Hz)")
+        ax2.grid(True, which='both', ls='--', alpha=0.4)
+
+        self.noise_fig.tight_layout()
+        self.noise_canvas.draw()
+
+        # ── Summary table ─────────────────────────────────────────────
+        self.noise_text.delete(1.0, tk.END)
+
+        # Pick geometric-mean frequency for percentage breakdown
+        f_mid   = np.exp(np.mean(np.log(freqs)))
+        idx_mid = int(np.argmin(np.abs(freqs - f_mid)))
+        f_show  = freqs[idx_mid]
+        S_total = S_v[idx_mid]
+
+        txt  = "=" * 68 + "\n"
+        txt += f"  NOISE ANALYSIS SUMMARY   at f = {f_show:.3e} Hz\n"
+        txt += "=" * 68 + "\n\n"
+        txt += f"  Total output noise:  {S_total:.4e} V²/Hz\n"
+        txt += f"                       {np.sqrt(max(S_total,0)):.4e} V/√Hz\n\n"
+        txt += f"  {'Source':<30} {'S_v (V²/Hz)':>14} {'%':>7}\n"
+        txt += "  " + "-" * 55 + "\n"
+
+        for label, S_arr in sorted(nr.contributions.items(),
+                                   key=lambda x: -x[1][idx_mid]):
+            S_k  = S_arr[idx_mid]
+            pct  = 100.0 * S_k / (S_total + 1e-300)
+            txt += f"  {label:<30} {S_k:>14.4e} {pct:>6.1f}%\n"
+
+        txt += "\n" + "=" * 68 + "\n"
+        txt += "  FREQUENCY SWEEP\n"
+        txt += "=" * 68 + "\n"
+        txt += f"  {'Freq (Hz)':<14} {'S_v (V²/Hz)':>14} {'V/√Hz':>14}\n"
+        txt += "  " + "-" * 44 + "\n"
+        step = max(1, len(freqs) // 20)
+        for i in range(0, len(freqs), step):
+            txt += f"  {freqs[i]:<14.3e} {S_v[i]:>14.4e} {S_sqrt[i]:>14.4e}\n"
+
+        self.noise_text.insert(tk.END, txt)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # ELMORE DELAY
+    # ─────────────────────────────────────────────────────────────────────
+
+    def run_elmore(self):
+        """Runs Elmore delay on the current circuit and displays results."""
+        if not self.circuit:
+            messagebox.showwarning("No Circuit", "Run a simulation first to load a circuit.")
+            return
+
+        try:
+            from engines.elmore import ElmoreEngine
+            eng    = ElmoreEngine(self.circuit)
+            delays = eng.compute()
+
+            self.mor_text.delete(1.0, tk.END)
+
+            txt  = "=" * 55 + "\n"
+            txt += "  ELMORE DELAY RESULTS\n"
+            txt += "=" * 55 + "\n\n"
+            txt += "  T_D(n) = Σ_k  R_k × C_downstream(k,n)\n\n"
+            txt += f"  {'Node':<15} {'Delay (s)':>14} {'Delay (ns)':>14} {'Delay (µs)':>12}\n"
+            txt += "  " + "-" * 55 + "\n"
+
+            for node, delay in sorted(delays.items(), key=lambda x: x[1]):
+                txt += (f"  {str(node):<15} {delay:>14.6e} "
+                        f"{delay*1e9:>14.4f} {delay*1e6:>12.4f}\n")
+
+            if delays:
+                dominant = max(delays, key=delays.get)
+                txt += f"\n  Dominant delay at node {dominant}: {delays[dominant]:.4e} s\n"
+
+            txt += "\n" + "=" * 55 + "\n"
+            txt += "  THEORY\n"
+            txt += "=" * 55 + "\n"
+            txt += "  Each capacitor Ck 'sees' the series resistance\n"
+            txt += "  from the source to Ck's node. The Elmore delay\n"
+            txt += "  is the 50% crossing time for a step input.\n"
+            txt += "  Key identity:  -m_1 = Elmore delay\n"
+            txt += "  (m_1 is the first circuit moment)\n"
+
+            self.mor_text.insert(tk.END, txt)
+            self.tabs.select(self.tab_mor)
+
+        except Exception as e:
+            messagebox.showerror("Elmore Error",
+                                 f"Elmore delay failed:\n{str(e)}\n\n"
+                                 "Note: circuit must be a resistor-capacitor tree.")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # AWE (MOMENTS + PADÉ)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def run_awe(self):
+        """Runs Moments + AWE on the current circuit and displays results."""
+        if not self.circuit:
+            messagebox.showwarning("No Circuit", "Run a simulation first to load a circuit.")
+            return
+
+        out_node = self.awe_node_var.get().strip()
+        if not out_node:
+            messagebox.showwarning("Node Required", "Enter an output node in the AWE node box.")
+            return
+
+        try:
+            order = int(self.awe_order_var.get())
+        except ValueError:
+            order = 4
+
+        try:
+            from engines.moments_engine import MomentsEngine
+            from engines.awe_engine import AWEEngine
+            import numpy as np
+
+            # ── Moments ───────────────────────────────────────────────
+            mom_eng  = MomentsEngine(self.circuit)
+            moments, _ = mom_eng.compute(out_node, num_moments=min(order*2, 16))
+
+            # ── AWE ───────────────────────────────────────────────────
+            awe = AWEEngine(self.circuit, out_node, order=order)
+            awe.build()
+
+            # ── Step response ─────────────────────────────────────────
+            if awe.poles is not None and len(awe.poles) > 0:
+                tau_dom = float(-1.0 / np.real(
+                    awe.poles[np.argmin(np.abs(np.real(awe.poles)))]))
+                t_max = max(5 * tau_dom, 1e-9)
+                t_arr = np.linspace(0, t_max, 500)
+                v_step = awe.evaluate_time(t_arr)
+            else:
+                t_arr = None; v_step = None
+
+            # ── Plot ──────────────────────────────────────────────────
+            self.noise_fig.clf()
+            if t_arr is not None:
+                ax = self.noise_fig.add_subplot(111)
+                ax.plot(t_arr, v_step, lw=2, color='steelblue')
+                ax.axhline(float(moments[0]), ls='--', color='gray', alpha=0.6,
+                           label=f'DC = {moments[0]:.3f}')
+                ax.set_xlabel("Time (s)")
+                ax.set_ylabel("V (step response)")
+                ax.set_title(f"AWE Step Response — V({out_node})")
+                ax.legend()
+                ax.grid(True, ls='--', alpha=0.4)
+                self.noise_fig.tight_layout()
+                self.noise_canvas.draw()
+
+            # ── Text report ───────────────────────────────────────────
+            self.mor_text.delete(1.0, tk.END)
+
+            txt  = "=" * 55 + "\n"
+            txt += f"  MOMENTS & AWE — V({out_node})\n"
+            txt += "=" * 55 + "\n\n"
+
+            txt += "  MOMENTS  m_k (Taylor coefficients of H(s))\n"
+            txt += "  " + "-" * 45 + "\n"
+            txt += "  H(s) = m_0 + m_1·s + m_2·s² + ...\n\n"
+            for k, m in enumerate(moments):
+                txt += f"  m_{k} = {float(m):+.6e}\n"
+
+            txt += "\n  Note: -m_1 = Elmore delay = "
+            txt += f"{float(-moments[1]):.4e} s\n" if len(moments) > 1 else "\n"
+
+            txt += "\n" + "=" * 55 + "\n"
+            txt += f"  AWE PADÉ APPROXIMANT (order {len(awe.poles)})\n"
+            txt += "=" * 55 + "\n"
+            txt += "  H(s) ≈ P(s)/Q(s)  matching first 2q moments\n\n"
+            txt += f"  {'Pole (rad/s)':<25} {'Residue':>18} {'τ = -1/Re(p)'}\n"
+            txt += "  " + "-" * 55 + "\n"
+
+            if awe.poles is not None:
+                for p, r in zip(awe.poles, awe.residues):
+                    tau_s = -1.0/np.real(p) if np.real(p) < 0 else float('inf')
+                    txt += (f"  {str(np.round(p, 4)):<25} "
+                            f"{str(np.round(r, 4)):>18}  "
+                            f"{tau_s:.4e} s\n")
+
+            if v_step is not None:
+                txt += "\n  STEP RESPONSE CHECKPOINTS\n"
+                txt += "  " + "-" * 40 + "\n"
+                txt += f"  {'Time (s)':<14} {'V(t)'}\n"
+                for frac in [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]:
+                    idx = int(frac * (len(t_arr)-1))
+                    txt += f"  {t_arr[idx]:<14.4e} {float(v_step[idx]):.6f}\n"
+
+            txt += "\n" + "=" * 55 + "\n"
+            txt += "  STEP RESPONSE plotted in the Noise Analysis tab.\n"
+
+            self.mor_text.insert(tk.END, txt)
+            self.tabs.select(self.tab_mor)
+
+        except Exception as e:
+            import traceback
+            messagebox.showerror("AWE Error",
+                                 f"AWE failed:\n{str(e)}\n\n"
+                                 "Check that output node exists and circuit\n"
+                                 "has a non-zero DC source.")

@@ -1,0 +1,8 @@
+* MOMENTS TEST 3: Moment frequency response vs AC sweep
+* Run both and compare |H(jw)| at low frequencies
+* Moments converge below f_c = 1/(2*pi*RC) = 159 Hz
+V1 1 0 AC 1
+R1 1 2 1000
+C1 2 0 1e-6
+.AC DEC 50 1 100000
+.END

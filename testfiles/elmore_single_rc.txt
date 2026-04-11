@@ -1,0 +1,8 @@
+* ELMORE TEST 1: Single RC
+* T_D(node 2) = R1 * C1 = 1000 * 1e-6 = 1e-3 s = 1 ms
+* Use: ElmoreEngine(circuit).report()
+V1 1 0 DC 1
+R1 1 2 1000
+C1 2 0 1e-6
+.OP
+.END

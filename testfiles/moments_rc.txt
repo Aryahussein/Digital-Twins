@@ -1,0 +1,10 @@
+* MOMENTS TEST 1: RC lowpass
+* H(s) = 1/(1+sRC)
+* Moments: m_k = (-RC)^k
+* m_0=1, m_1=-1e-3, m_2=1e-6, m_3=-1e-9 ...
+* Use: MomentsEngine(circuit).compute('2', num_moments=6)
+V1 1 0 DC 1
+R1 1 2 1000
+C1 2 0 1e-6
+.OP
+.END

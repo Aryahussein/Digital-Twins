@@ -1,0 +1,8 @@
+* AWE TEST 3: Frequency response via AWE vs full AC sweep
+* AWE uses DC circuit moments, evaluates H(jw) via Pade poles
+* Should match AC sweep to machine precision at all frequencies
+V1 1 0 AC 1
+R1 1 2 1000
+C1 2 0 1e-6
+.AC DEC 50 1 100000
+.END

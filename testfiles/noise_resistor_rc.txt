@@ -1,0 +1,10 @@
+* NOISE TEST 1: RC lowpass — resistor thermal noise
+* Expected: S_v(f) = 4kTR / (1 + (2*pi*f*RC)^2)  V^2/Hz
+* At 1 Hz:    S_v = 4*1.38e-23*298*1000 = 1.645e-17 V^2/Hz
+* At 159 Hz:  S_v = 4kTR/2  (3dB point, -3dB vs low freq)
+* At 10 kHz:  S_v = 4.17e-21 V^2/Hz  (rolls off 40dB/decade)
+V1 1 0 AC 1
+R1 1 2 1000
+C1 2 0 1e-6
+.NOISE V(2) V1 DEC 50 1 100000
+.END

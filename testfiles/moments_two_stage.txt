@@ -1,0 +1,11 @@
+* MOMENTS TEST 2: Two-stage RC
+* m_0 = 1 (DC gain = 1)
+* m_1 = -(R1*C1 + R1*C2 + R2*C2) = -7e-3  [= -Elmore delay]
+* Use: MomentsEngine(circuit).compute('3', num_moments=4)
+V1 1 0 DC 1
+R1 1 2 1000
+R2 2 3 2000
+C1 2 0 1e-6
+C2 3 0 2e-6
+.OP
+.END

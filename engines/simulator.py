@@ -1,15 +1,10 @@
-"""
-Master Simulator Module.
-
-Routes analyses to the correct engine: DC, AC, Transient, DC Sweep, OP.
-Includes TR + nonlinear adjoint fix: runs a parallel BE pass for sensitivity
-when TR is selected on a circuit containing MOSFETs or diodes.
-"""
+"""Master Simulator Module."""
 
 from engines.dc_engine import DCEngine
 from engines.transient_engine import TransientEngine
 from engines.ac_engine import ACEngine
 from engines.adjoint_engine import AdjointEngine
+from engines.noise_engine import NoiseEngine
 from core.results import SimulationResult
 import numpy as np
 
@@ -53,8 +48,8 @@ class Simulator:
             result.list_of_lus = lus
 
             if sensitivity:
-                # TR + nonlinear: run a parallel BE pass for the adjoint.
-                # TR waveform is kept for display; sensitivity uses BE LUs.
+                # TR + nonlinear: use a parallel BE pass for the adjoint.
+                # TR waveform is kept; sensitivity uses self-consistent BE LUs.
                 sens_method = method
                 sens_VI     = VI
                 sens_lus    = lus
@@ -143,7 +138,35 @@ class Simulator:
 
             return result
 
+        # ── NOISE ────────────────────────────────────────────────────
+        elif ".NOISE" in self.analyses:
+            print("\nStarting Noise Analysis...")
+            cfg        = self.analyses[".NOISE"]
+            out_node   = cfg["output_node"]
+            sweep_type = cfg["sweep_type"]
+            start      = cfg["start"]
+            stop       = cfg["stop"]
+            pts        = cfg["num_points"]
+
+            _, v_dc = dc_engine.compute_dc_bias(Y_base)
+
+            # Run AC sweep with LUs cached (needed for adjoint solve)
+            ac_engine = ACEngine(self.circuit, self.is_nonlinear)
+            ac_result = ac_engine.run(
+                Y_base, v_dc, start, stop, pts,
+                sweep_type=sweep_type, keep_lus=True
+            )
+
+            noise_engine = NoiseEngine(self.circuit, out_node)
+            noise_result = noise_engine.run(Y_base, v_dc, ac_result)
+
+            frequencies, VI_ac, _ = ac_result
+            result = SimulationResult(".NOISE", frequencies, VI_ac,
+                                      self.circuit.node_map)
+            result.noise = noise_result
+            return result
+
         else:
             raise ValueError(
-                "No recognized analysis (.TRAN, .AC, .DC, .OP) found."
+                "No recognized analysis (.TRAN, .AC, .DC, .OP, .NOISE) found."
             )

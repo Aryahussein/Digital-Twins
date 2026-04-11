@@ -173,3 +173,22 @@ class Component:
         if j is not None:
             Y[j, b] -= 1
             Y[b, j] -= 1
+
+    def get_noise_sources(self, VI, w):
+        """Returns noise current sources for this component at operating point VI.
+
+        Noise sources are modelled as uncorrelated current sources in parallel
+        with the component. Each entry gives:
+            - 'nodes': (node_p, node_n) where current flows from p to n
+            - 'S':     single-sided power spectral density in A²/Hz
+            - 'label': human-readable source name
+
+        Args:
+            VI (np.ndarray): Current operating point (from AC/DC solve).
+            w  (float):      Angular frequency in rad/s (for 1/f noise).
+
+        Returns:
+            list of dicts, each with keys 'nodes', 'S', 'label'.
+            Returns empty list if component generates no noise.
+        """
+        return []

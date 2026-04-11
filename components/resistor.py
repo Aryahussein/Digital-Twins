@@ -57,3 +57,11 @@ class Resistor(Component):
         p2 = PsiPhi[self.idx_2] if self.idx_2 is not None else 0.0
         
         return {self.name: (1.0 / (self.value**2)) * ((v1 - v2) * (p1 - p2))}
+
+    def get_noise_sources(self, VI, w):
+        """Thermal (Johnson-Nyquist) noise: S_i = 4kT/R  A²/Hz."""
+        from core.constants import kb, T
+        S = 4.0 * kb * T / self.value
+        return [{'nodes': (self.idx_1, self.idx_2),
+                 'S': S,
+                 'label': f'{self.name}_thermal'}]

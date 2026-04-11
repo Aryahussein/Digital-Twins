@@ -1,0 +1,12 @@
+* AWE TEST 2: Two-stage RC — two poles
+* The Pade approximant finds both poles automatically
+* Step response rises slower than single stage
+* Use: AWEEngine(circuit, '3', order=4).build()
+*      then evaluate_time() and compare with TRAN below
+V1 1 0 DC 1
+R1 1 2 1000
+R2 2 3 2000
+C1 2 0 1e-6
+C2 3 0 2e-6
+.OP
+.END

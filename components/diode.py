@@ -79,3 +79,15 @@ class Diode(Component):
         res = models.evaluate_diode(va - vk, self.IS, self.VT)
         
         return {f"{self.name}_IS": -(pa - pk) * res["dId_dIs"]}
+
+    def get_noise_sources(self, VI, w):
+        """Diode shot noise: S_id = 2*q*|Id|  A²/Hz."""
+        import core.constants as const
+        va = VI[self.idx_a] if self.idx_a is not None else 0.0
+        vk = VI[self.idx_k] if self.idx_k is not None else 0.0
+        res = models.evaluate_diode(va - vk, self.IS, self.VT)
+        Id = abs(res['I_D'])
+        S = 2.0 * const.e * Id
+        return [{'nodes': (self.idx_a, self.idx_k),
+                 'S': S,
+                 'label': f'{self.name}_shot'}]

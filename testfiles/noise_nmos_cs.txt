@@ -1,0 +1,18 @@
+* NOISE TEST 4: NMOS common-source amplifier
+* VGS=2V, VTO=0.7V, KP=100u, W=L=1u, RD=10k
+* Operating point: Vov=1.3V, Id~84uA, gm~130uA/V
+* 
+* Noise sources:
+*   RD thermal:       S_v = 4kT*RD = 1.645e-16 V^2/Hz (white, flat)
+*   M1 channel:       S_v = 4kT*(2/3)*gm*RD^2 ~ 1.4e-17 V^2/Hz (white)
+*   M1 flicker (1/f): S_v = KF*Id*RD^2/(Cox*L^2*f)  (rises at low freq)
+*
+* At 1 Hz:   flicker >> thermal (1/f noise dominates)
+* At 1 MHz:  flicker still large (corner freq ~ 172 GHz for KF=1e-24)
+VDD 3 0 DC 5
+VGS 1 0 DC 2.0
+RD  3 2 10000
+M1  2 1 0 0 NMOS
+.MODEL NMOS VTO=0.7 KP=100u
+.NOISE V(2) VDD DEC 30 1 1MEG
+.END

@@ -1,0 +1,10 @@
+* ELMORE TEST 2: Two-stage RC chain
+* T_D(2) = R1*(C1+C2) = 1k*(1u+2u) = 3 ms
+* T_D(3) = R1*(C1+C2) + R2*C2 = 3ms + 2k*2u = 7 ms
+V1 1 0 DC 1
+R1 1 2 1000
+R2 2 3 2000
+C1 2 0 1e-6
+C2 3 0 2e-6
+.OP
+.END

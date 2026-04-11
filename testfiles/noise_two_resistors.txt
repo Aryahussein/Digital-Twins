@@ -1,0 +1,11 @@
+* NOISE TEST 2: Two resistors in series — noise adds
+* Both R1 and R2 contribute thermal noise independently
+* Total at low freq: S_v ~ 4kT*(R1+R2) = 4kT*3000 = 4.94e-17 V^2/Hz
+* R2 contributes more because it sees all its noise go to output
+* R1 contributes less at high freq (C1 shorts it out)
+V1 1 0 AC 1
+R1 1 2 1000
+R2 2 3 2000
+C1 3 0 1e-6
+.NOISE V(3) V1 DEC 30 1 10000
+.END

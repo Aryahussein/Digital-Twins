@@ -1,0 +1,9 @@
+* AWE TEST 2b: Same circuit with PULSE for transient comparison
+* Compare AWE step response against this transient
+V1 1 0 DC 0 PULSE(0 1 0 1n 1n 1000 2000)
+R1 1 2 1000
+R2 2 3 2000
+C1 2 0 1e-6
+C2 3 0 2e-6
+.TRAN 0.1e-3 30e-3
+.END

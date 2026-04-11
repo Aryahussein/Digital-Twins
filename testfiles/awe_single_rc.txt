@@ -1,0 +1,10 @@
+* AWE TEST 1: Single RC — one pole at s = -1/RC = -1000
+* Expected pole: -1000 rad/s
+* Time constant: tau = 1e-3 s = 1 ms
+* Step response: v(t) = 1 - exp(-1000*t)
+* Use: AWEEngine(circuit, '2', order=2).build()
+V1 1 0 DC 1
+R1 1 2 1000
+C1 2 0 1e-6
+.OP
+.END

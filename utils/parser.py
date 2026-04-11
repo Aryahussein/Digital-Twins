@@ -106,6 +106,9 @@ class NetlistParser:
         elif cmd == ".AC":
             self._parse_ac_command(tokens)
             
+        elif cmd == ".NOISE":
+            self._parse_noise_command(tokens)
+            
         elif cmd == ".DC":
             self._parse_dc_command(tokens)
             
@@ -178,6 +181,47 @@ class NetlistParser:
             "start": self._parse_value(tokens[3]), 
             "stop": self._parse_value(tokens[4])
         }
+
+    def _parse_noise_command(self, tokens):
+        """Parses .NOISE OUTNODE INSOURCE TYPE NPOINTS FSTART FSTOP.
+
+        SPICE format:
+            .NOISE V(out) Vin DEC 50 1 1MEG
+            .NOISE V(out,ref) Vin DEC 50 1 1MEG
+
+        Simplified format also accepted (output node only):
+            .NOISE out Vin DEC 50 1 1MEG
+        """
+        if len(tokens) < 7:
+            self._throw_error(
+                "Expected '.NOISE OUTNODE INSRC TYPE NPOINTS FSTART FSTOP'.\n"
+                "Example: .NOISE V(3) Vin DEC 50 1 1MEG"
+            )
+
+        # Parse output node — strip V(...) wrapper if present
+        out_token = tokens[1]
+        if out_token.upper().startswith('V(') and out_token.endswith(')'):
+            inner = out_token[2:-1]
+            # Handle differential V(out,ref) — just use first node
+            out_node = inner.split(',')[0].strip()
+        else:
+            out_node = out_token
+
+        # Try to convert to int if numeric
+        try:
+            out_node = int(out_node)
+        except ValueError:
+            pass
+
+        self.analyses[".NOISE"] = {
+            "output_node": out_node,
+            "input_source": tokens[2],
+            "sweep_type":   tokens[3].upper(),
+            "num_points":   int(tokens[4]),
+            "start":        self._parse_value(tokens[5]),
+            "stop":         self._parse_value(tokens[6])
+        }
+
 
     def _parse_dc_command(self, tokens):
         """Parses .DC SOURCE START STOP STEP.

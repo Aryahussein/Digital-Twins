@@ -1,0 +1,11 @@
+* NOISE TEST 5: NMOS with small KF to see thermal/flicker crossover
+* KF=1e-31 gives corner frequency around 1kHz (visible in sweep)
+* Below ~1kHz: flicker dominates  (rising 1/f slope)
+* Above ~1kHz: thermal dominates  (flat)
+VDD 3 0 DC 5
+VGS 1 0 DC 2.0
+RD  3 2 10000
+M1  2 1 0 0 NMOS
+.MODEL NMOS VTO=0.7 KP=100u KF=1e-31
+.NOISE V(2) VDD DEC 30 1 1MEG
+.END
