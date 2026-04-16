@@ -41,7 +41,7 @@ class Inductor(Component):
         Y[self.branch_idx, self.branch_idx] -= req
         sources[self.branch_idx] -= v_eq
 
-    def build_adjoint_history(self, J_hist, dt, v_hat_next, adjoint_state, method='BE'):
+    def build_adjoint_history(self, J_hist, dt, v_hat_next, method='BE'):
         """Builds the adjoint RHS memory term for Backward Euler."""
         if self.branch_idx is not None:
             # The adjoint inductor memory depends on the adjoint branch current 
@@ -54,7 +54,7 @@ class Inductor(Component):
             # Subtract from the branch equation row in the RHS history
             J_hist[self.branch_idx] -= V_eq_hat
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None, method='TR'):
         """Calculates sensitivity w.r.t Inductance (L)."""
         if self.branch_idx is None: return {}
 
@@ -69,12 +69,19 @@ class Inductor(Component):
             dVL_dL = 1j * w * i_L
             return {self.name: psi_branch * dVL_dL}
 
-        # 2. Transient Analysis (V_L = (L/dt) * (I_L - I_prev))
+        # 2. Transient Analysis
         elif dt is not None and V_prev is not None:
             i_L_prev = V_prev[self.branch_idx]
             
-            # dVL/dL = dI/dt using Backward Euler
-            dI_dt = (i_L - i_L_prev) / dt
+            # Current change over this time step
+            dI = i_L - i_L_prev
+            
+            # dVL/dL varies based on the integration scheme used
+            if method == 'TR':
+                dI_dt = (2.0 * dI) / dt
+            else:  # 'BE' (Backward Euler)
+                dI_dt = dI / dt
+                
             return {self.name: psi_branch * dI_dt}
 
         # 3. DC Analysis (Inductor is a short, L has no effect on DC bias)

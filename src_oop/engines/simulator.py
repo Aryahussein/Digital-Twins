@@ -1,12 +1,3 @@
-"""
-Master Simulator Module.
-
-This module provides the central `Simulator` class, which orchestrates the execution
-of various circuit analyses. It initializes the base circuit topology and dynamically 
-routes the data to the correct numerical engine (DC, AC, Transient) based on the 
-user's requested simulation commands.
-"""
-
 from engines.dc_engine import DCEngine
 from engines.transient_engine import TransientEngine
 from engines.ac_engine import ACEngine
@@ -23,13 +14,14 @@ class Simulator:
 
     Attributes:
         circuit (Circuit): The fully initialized, polymorphic circuit object.
-        analyses (dict): A dictionary of requested analyses parsed from the netlist 
-            (e.g., {'.TRAN': {'stop': 1e-3, 'step': 1e-6}}).
-        output_nodes (list): Target nodes for Adjoint sensitivity calculations.
-        is_nonlinear (bool): Automatically detected flag indicating if Newton-Raphson 
-            solvers are required.
-        is_complex (bool): Automatically detected flag indicating if complex matrix 
-            dtypes are required for AC analysis.
+        analyses (dict[str, dict]): A dictionary of requested analyses parsed 
+            from the netlist (e.g., {'.TRAN': {'stop': 1e-3, 'step': 1e-6}}).
+        output_nodes (list[str or int]): Target nodes for Adjoint sensitivity 
+            calculations. Defaults to all nodes in the circuit.
+        is_nonlinear (bool): Automatically detected flag indicating if 
+            Newton-Raphson solvers are required by any component.
+        is_complex (bool): Automatically detected flag indicating if complex 
+            matrix dtypes are required for AC analysis.
     """
 
     def __init__(self, circuit, analyses, output_nodes=None):
@@ -37,9 +29,10 @@ class Simulator:
 
         Args:
             circuit (Circuit): The constructed circuit object.
-            analyses (dict): The dictionary of simulation commands.
-            output_nodes (list, optional): Specific nodes to track for sensitivity. 
-                Defaults to tracking all voltage nodes.
+            analyses (dict[str, dict]): The dictionary of simulation commands.
+            output_nodes (list[str or int], optional): Specific nodes to track 
+                for sensitivity. Defaults to None, which automatically tracks 
+                all valid voltage nodes.
         """
         self.circuit = circuit
         self.analyses = analyses
@@ -49,68 +42,61 @@ class Simulator:
         self.is_nonlinear = any(comp.IS_NONLINEAR for comp in circuit.components)
         self.is_complex = ".AC" in analyses
 
-    def execute_analysis(self, sensitivity=False, keep_lus=False):
+    def execute_analysis(self, sensitivity=False, global_adjoint=False, keep_lus=False):
         """Routes and executes the requested simulation.
 
-        This method builds the static matrix topology once, then checks the 
-        `analyses` dictionary to determine which engine to invoke. 
+        This method builds the static matrix topology once, delegates mathematical 
+        solving to the specific forward engine (.TRAN, .AC, .DC, .OP), unifies 
+        the output formatting, and optionally triggers the backward Adjoint passes.
 
         Args:
-            sensitivity (bool, optional): If True, triggers the backward Adjoint 
-                pass after the primary simulation finishes. Defaults to False.
+            sensitivity (bool, optional): If True, triggers the calculation of the 
+                unified continuous sensitivity tensor. Defaults to False.
+            global_adjoint (bool, optional): If True, triggers the backward-propagating 
+                global sensitivity integral. This flag only applies to .TRAN analyses. 
+                Defaults to False.
             keep_lus (bool, optional): If True, caches the scipy LU factorizations 
-                in memory. Automatically enabled if sensitivity is True. Defaults to False.
+                in memory. This is automatically enabled if either sensitivity flag 
+                is True. Defaults to False.
 
         Returns:
-            SimulationResult: A secure data vault containing the simulation outputs.
+            SimulationResult: A secure data vault containing all forward state 
+            variables and any requested sensitivity gradients.
 
         Raises:
-            ValueError: If no valid analysis commands (.TRAN, .AC, .DC, .OP) are found.
+            ValueError: If no recognized analysis command (.TRAN, .AC, .DC, .OP) 
+            is found in the analyses dictionary.
         """
         # 1. Base Topology Setup
         dc_engine = DCEngine(self.circuit, self.is_complex, self.is_nonlinear)
         Y_base = dc_engine.build_base_matrices()
 
+        # Define universal payload variables for clean packaging
+        analysis_type = ""
+        domain = ""
+        sweep_axis = None
+        VI = None
+        lus = None
+        dt = 0.0
+        method = "TR"  # Default integration method
+
         # ==========================================
-        # TRANSIENT ROUTE
+        # 2. RUN THE FORWARD MATH ENGINES
         # ==========================================
         if ".TRAN" in self.analyses:
             print("\nStarting Transient Analysis...")
             t_stop = self.analyses[".TRAN"]["stop"]
             dt = self.analyses[".TRAN"]["step"]
-            
-            # Get t=0 starting bias (Removed sources_base)
-            _, v_initial = dc_engine.compute_dc_bias(Y_base)
-            
-            # Run Forward Engine (Removed sources_base)
-            tran_engine = TransientEngine(self.circuit, self.is_nonlinear)
             method = self.analyses.get("OPTIONS", {}).get("method", "TR")
-            time, VI, lus = tran_engine.run(
-                Y_base, v_initial, t_stop, dt, keep_lus=(keep_lus or sensitivity), method = method
+            
+            _, v_initial = dc_engine.compute_dc_bias(Y_base)
+            tran_engine = TransientEngine(self.circuit, self.is_nonlinear)
+            
+            sweep_axis, VI, lus = tran_engine.run(
+                Y_base, v_initial, t_stop, dt, keep_lus=(keep_lus or sensitivity or global_adjoint), method=method
             )
-            
-            result = SimulationResult(".TRAN", time, VI, self.circuit.node_map, dt=dt)
-            result.list_of_lus = lus
-            
-            if sensitivity:
-                adj_engine = AdjointEngine(self.circuit, self.output_nodes)
-                adjoint_results = {}
+            analysis_type, domain = ".TRAN", "time"
 
-                global_sens = adj_engine.compute_transient(time, VI, lus, dt)
-                adjoint_results.update(global_sens) # Adds "Time_Series" and "Integrated_Transient"
-
-                # local_sens = adj_engine.compute_continuous_local_adjoint(time, VI, lus, dt)
-                # adjoint_results["Continuous_Local_DC"] = local_sens
-                cube = adj_engine.compute_continuous_local_adjoint(time, VI, lus, dt)
-                adjoint_results["Sensitivity_Cube"] = cube
-
-                result.sensitivities = adjoint_results
-                
-            return result
-
-        # ==========================================
-        # AC ROUTE
-        # ==========================================
         elif ".AC" in self.analyses:
             print("\nStarting AC Analysis...")
             start = self.analyses[".AC"]["start"]
@@ -118,63 +104,72 @@ class Simulator:
             pts = self.analyses[".AC"]["num_points"]
             sweep_type = self.analyses[".AC"].get("sweep_type", "DEC")
             
-            # 1. Get the DC linearization point
             _, v_dc = dc_engine.compute_dc_bias(Y_base)
-            
             ac_engine = ACEngine(self.circuit, self.is_nonlinear)
-            freq, VI, lus = ac_engine.run(
+            
+            sweep_axis, VI, lus = ac_engine.run(
                 Y_base, v_dc, start, stop, pts, sweep_type=sweep_type, keep_lus=(keep_lus or sensitivity)
             )
-            
-            result = SimulationResult(".AC", freq, VI, self.circuit.node_map)
-            result.list_of_lus = lus
+            analysis_type, domain = ".AC", "frequency"
 
-            if sensitivity:
-                adj_engine = AdjointEngine(self.circuit, self.output_nodes)
-                result.sensitivities = adj_engine.compute_sweep(VI, lus, freq_array=freq)
-                
-            return result
-
-        # ==========================================
-        # DC SWEEP ROUTE
-        # ==========================================
         elif ".DC" in self.analyses:
-            source_name = self.analyses[".DC"]["source"]
+            print("\nStarting DC Sweep Analysis...")
+            source = self.analyses[".DC"]["source"]
             start = self.analyses[".DC"]["start"]
             stop = self.analyses[".DC"]["stop"]
             step = self.analyses[".DC"]["step"]
             
             sweep_axis, VI, lus = dc_engine.compute_dc_sweep(
-                Y_base, source_name, start, stop, step, keep_lus=(keep_lus or sensitivity)
+                Y_base, source, start, stop, step, keep_lus=(keep_lus or sensitivity)
             )
-            
-            result = SimulationResult(".DC", sweep_axis, VI, self.circuit.node_map)
-            result.list_of_lus = lus
+            analysis_type, domain = ".DC", "voltage"
 
-            if sensitivity:
-                adj_engine = AdjointEngine(self.circuit, self.output_nodes)
-                result.sensitivities = adj_engine.compute_sweep(VI, lus)
-                
-            return result
-            
-        # ==========================================
-        # OPERATING POINT (.OP) ROUTE
-        # ==========================================
         elif ".OP" in self.analyses:
             print("\nStarting DC Operating Point Analysis...")
-            
             lu_dc, v_dc = dc_engine.compute_dc_bias(Y_base)
             
-            # Store single point in Data Vault
-            result = SimulationResult(".OP", np.array([0.0]), v_dc, self.circuit.node_map)
-            result.list_of_lus = [lu_dc]
-
-            if sensitivity:
-                adj_engine = AdjointEngine(self.circuit, self.output_nodes)
-                # Wrap the 1D v_dc vector into a 2D array [v_dc] so the sweep engine can iterate it
-                result.sensitivities = adj_engine.compute_sweep(np.array([v_dc]), [lu_dc])
-            
-            return result
+            # Wrap standard 1D .OP output into sweep-compatible formats
+            sweep_axis = np.array([0.0])
+            VI = np.array([v_dc]) 
+            lus = [lu_dc]
+            analysis_type, domain = ".OP", "static"
 
         else:
             raise ValueError("No recognized analysis (.TRAN, .AC, .DC, .OP) found in the parsed netlist commands.")
+
+        # ==========================================
+        # 3. PACKAGE FORWARD RESULTS
+        # ==========================================
+        result = SimulationResult(analysis_type, sweep_axis, VI, self.circuit.node_map)
+        result.list_of_lus = lus
+
+        # ==========================================
+        # 4. RUN THE ADJOINT ENGINES
+        # ==========================================
+        if sensitivity or global_adjoint:
+            adj_engine = AdjointEngine(self.circuit, self.output_nodes)
+
+            # 4A. Run the Unified Continuous Tensor (For all domains)
+            if sensitivity:
+                result.sensitivities = adj_engine.compute_sensitivities(
+                    sweep_axis=sweep_axis, 
+                    V_forward=VI, 
+                    list_of_lus=lus, 
+                    domain=domain, 
+                    dt=dt,
+                    method=method
+                )
+
+            # 4B. Run the Backward Global Integral (ONLY for TRAN)
+            if global_adjoint and domain == "time":
+                result.global_sensitivities = adj_engine.compute_transient(
+                    time_array=sweep_axis, 
+                    V_forward=VI, 
+                    list_of_lus=lus, 
+                    dt=dt, 
+                    method=method
+                )
+            elif global_adjoint and domain != "time":
+                print("\nWarning: 'global_adjoint' was requested, but it only applies to .TRAN analyses. Skipping.")
+            
+        return result

@@ -6,6 +6,13 @@ class Diode(Component):
 
     IS_NONLINEAR = True
 
+    @property
+    def differentiable_params(self):
+        """Overrides the base Component property to advertise MOS-specific parameters."""
+        return [
+            f"{self.name}_IS",
+        ]
+
     def bind_nodes(self, node_map):
         """Maps Anode (n1) and Cathode (n2) to matrix indices."""
         self.idx_a = node_map.get(self.data.get("n1", 0))
@@ -45,7 +52,7 @@ class Diode(Component):
             if self.idx_a is not None:
                 Y[self.idx_k, self.idx_a] -= gd
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Saturation Current (IS)."""
         va = VI[self.idx_a] if self.idx_a is not None else 0.0
         vk = VI[self.idx_k] if self.idx_k is not None else 0.0

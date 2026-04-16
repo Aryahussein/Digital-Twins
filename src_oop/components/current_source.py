@@ -44,7 +44,7 @@ class CurrentSource(Component):
         if self.idx_2 is not None:
             sources[self.idx_2] += current_val
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Returns the sensitivity of the output w.r.t the source value."""
         p1 = PsiPhi[self.idx_1] if self.idx_1 is not None else 0.0
         p2 = PsiPhi[self.idx_2] if self.idx_2 is not None else 0.0

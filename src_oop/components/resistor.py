@@ -17,7 +17,7 @@ class Resistor(Component):
         if j is not None:
             Y[j, j] += g
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, **kwargs):
         v1 = VI[self.idx_1] if self.idx_1 is not None else 0.0
         v2 = VI[self.idx_2] if self.idx_2 is not None else 0.0
         p1 = PsiPhi[self.idx_1] if self.idx_1 is not None else 0.0

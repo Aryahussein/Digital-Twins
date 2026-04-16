@@ -18,6 +18,15 @@ class Mosfet(Component):
                 f"Cannot instantiate '{self.__class__.__name__}'. "
                 "Subclasses of MOS must define a 'POLARITY' constant."
             )
+
+        @property
+        def differentiable_params(self):
+            """Overrides the base Component property to advertise MOS-specific parameters."""
+            return [
+                f"{self.name}_W",
+                f"{self.name}_L",
+                f"{self.name}_VTO"
+            ]
     
     def bind_nodes(self, node_map):
         self.idx_d = node_map.get(self.data.get("n_d", 0))
@@ -64,7 +73,7 @@ class Mosfet(Component):
             Y[self.idx_s, self.idx_s] += (gm + gds)
             sources[self.idx_s] += ieq
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, **kwargs):
         vd, vg, vs = (VI[idx] if idx is not None else 0.0 for idx in (self.idx_d, self.idx_g, self.idx_s))
         pd, ps = (PsiPhi[idx] if idx is not None else 0.0 for idx in (self.idx_d, self.idx_s))
         

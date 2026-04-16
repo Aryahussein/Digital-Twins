@@ -39,6 +39,11 @@ class Component:
         """
         pass 
 
+    @property
+    def differentiable_params(self):
+        """Returns a list of parameter names this component can calculate sensitivities for."""
+        return [self.name]
+
     # === POLYMORPHIC METHODS ===
     def stamp_mna_connection(self, Y):
         """Stamps MNA branch topology (+1/-1) into the admittance matrix."""
@@ -84,15 +89,11 @@ class Component:
         pass
     
     # === ADJOINT METHODS ===
-    def build_adjoint_history(self, J_hist, dt, v_hat_next, adjoint_state, method='BE'):
+    def build_adjoint_history(self, J_hist, dt, v_hat_next, method='BE'):
         """Builds the RHS current history vector for the backward adjoint sweep."""
         pass
         
-    def update_adjoint_state(self, dt, v_hat_next, v_hat, adjoint_state, method='BE'):
-        """Updates internal memory states required by integration methods like TR."""
-        pass
-        
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None, method='TR'):
         """Calculates the parameter sensitivities using the Adjoint method.
         
         Returns:

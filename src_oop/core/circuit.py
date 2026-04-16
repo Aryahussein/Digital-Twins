@@ -153,3 +153,14 @@ class Circuit:
         if name not in self.components_dict:
             raise KeyError(f"Component '{name}' not found in circuit.")
         return self.components_dict[name]
+
+
+    @property
+    def differentiable_params(self):
+        """A master list of all tunable parameters in the circuit."""
+        params = []
+        for comp in self.components:
+            for p in comp.differentiable_params:
+                if p not in params:
+                    params.append(p)
+        return params

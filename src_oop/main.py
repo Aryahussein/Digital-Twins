@@ -12,14 +12,15 @@ from engines.simulator import Simulator
 from utils.plotting import plot_transient, plot_transient_sensitivity, plot_dc_sweep, plot_dc_sensitivity, plot_ac_sensitivity, print_solution, make_bode_plot
 import numpy as np
 
-def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, keep_lus=False):
+def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, global_adjoint=False, keep_lus=False):
     """Runs the complete SPICE simulation pipeline.
 
     Args:
         netlist_path (str): The file path to the SPICE netlist text file.
         output_nodes (list, optional): Target nodes for Adjoint sensitivities. 
             Defaults to None.
-        sensitivity (bool, optional): Toggles the backward Adjoint pass. Defaults to False.
+        sensitivity (bool, optional): Toggles the unified continuous sensitivity tensor. Defaults to False.
+        global_adjoint (bool, optional): Toggles the backward global integral for TRAN. Defaults to False.
         keep_lus (bool, optional): Forces LU factorization caching. Defaults to False.
 
     Returns:
@@ -37,25 +38,29 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, keep
     sim = Simulator(circuit, analyses, output_nodes)
 
     # 4. Execute Analysis
-    result = sim.execute_analysis(sensitivity=sensitivity, keep_lus=keep_lus)
+    result = sim.execute_analysis(
+        sensitivity=sensitivity, 
+        global_adjoint=global_adjoint, 
+        keep_lus=keep_lus
+    )
 
-    # 5. Return the objects directly! No more messy dictionaries.
+    # 5. Return the objects directly
     return circuit, result
 
 
 if __name__ == "__main__":
-    # print("DEBUG: file_path will be:", f"../testfiles/rc_transient.txt")
     # --- Configuration ---
-    netlist = "nmos_inverter" # rc_lowpass
+    netlist = "rc_transient" # nmos_inverter, rc_lowpass, etc.
     file_path = f"../testfiles/{netlist}.txt"
-    target_node = "out" # The plotting tools now handle single strings or lists automatically!
-    target_component = "M1_W" 
+    target_node = "out" 
+    target_component = "R1" 
 
     # --- Execution ---
     circuit, result = run_simulation_core(
         file_path, 
         output_nodes=[target_node], 
-        sensitivity=True
+        sensitivity=True,
+        global_adjoint=False  # Ensure we calculate the global backward integrals for TRAN
     )
 
     # --- Post-Processing & Visualization ---
@@ -79,28 +84,31 @@ if __name__ == "__main__":
         if calculated_params:
             print(f"\n=== TRANSIENT SENSITIVITIES FOR V({target_node}) ===")
             for param in calculated_params:
-                val = result.get_sensitivity(target_node, param, output_format="integrated") # Default
-                print(f"  {param:<15} : {val:+.6e}")
+                # Print the total global scalar integral (if calculated)
+                if result.global_sensitivities:
+                    val = result.global_sensitivities["Integrated_Transient"][target_node].get(param, 0.0)
+                    print(f"  {param:<15} : {val:+.6e} (Integrated)")
             
             if target_component in calculated_params:
+                # Plot the continuous tensor series
+                # Note: You can remove the 'format' argument from your plotting function!
                 plot_transient_sensitivity(
                     result, 
                     target_node, 
                     target_component=target_component, 
-                    format="local_dc", # Default
                     folder="../figures/tran", 
                     name=f"{netlist}_tran_sens"
                 )
-        # Quick cube test
-        cube = result.sensitivities["Sensitivity_Cube"]
-        cube.print_matrix_at_time(0)
-        cube.print_matrix_at_time(-1)
+        
+        # Quick tensor test: Print matrices at first and last time steps
+        if result.sensitivities:
+            result.sensitivities.print_matrix_at_step(0)
+            result.sensitivities.print_matrix_at_step(-1)
 
     # ==========================================
     # AC ANALYSIS (Frequency Domain)
     # ==========================================
     elif result.type == ".AC":
-        
         make_bode_plot(
             result, 
             output_nodes=target_node, 
@@ -145,7 +153,6 @@ if __name__ == "__main__":
     # DC OPERATING POINT (.OP)
     # ==========================================
     elif result.type == ".OP":
-        
         # Use the utility function to print node voltages and branch currents
         print_solution(result)
 

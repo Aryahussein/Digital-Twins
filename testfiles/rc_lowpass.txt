@@ -1,7 +1,7 @@
 * Easy to read!
 V1 input 0 DC 0 AC 1
-R1 input filter_out 1k
-C1 filter_out 0 1u
+R1 input out 1k
+C1 out 0 1u
 .AC DEC 50 1 100k
 
 

@@ -50,7 +50,7 @@ class OpAmp(Component):
     # def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
     # def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Open-Loop Gain (A)."""
         if self.branch_idx is None: return {}
 

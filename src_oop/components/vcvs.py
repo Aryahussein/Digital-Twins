@@ -33,7 +33,7 @@ class VCVS(Component):
         if self.idx_4 is not None:
             Y[b, self.idx_4] += self.gain
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Gain."""
         if self.branch_idx is None: return {}
 

@@ -39,7 +39,7 @@ class CCVS(Component):
         # KVL row: -H at controlling branch column
         Y[b, self.ctrl_branch_idx] -= self.transresistance
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Transresistance (H)."""
         if self.branch_idx is None: return {}
 

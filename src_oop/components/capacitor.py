@@ -55,7 +55,7 @@ class Capacitor(Component):
         v_diff = v1 - v2
         self.prev_current = self._last_g_eq * v_diff - self._last_I_eq
 
-    def build_adjoint_history(self, J_hist, dt, v_hat_next, adjoint_state, method='BE'):
+    def build_adjoint_history(self, J_hist, dt, v_hat_next, method='BE'):
         i, j = self.idx_1, self.idx_2
         v1_hat = v_hat_next[i] if i is not None else 0.0
         v2_hat = v_hat_next[j] if j is not None else 0.0
@@ -64,7 +64,7 @@ class Capacitor(Component):
         if i is not None: J_hist[i] += I_eq
         if j is not None: J_hist[j] -= I_eq
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None, method='TR'):
         """Calculates sensitivity w.r.t Capacitance (C)."""
         v1 = VI[self.idx_1] if self.idx_1 is not None else 0.0
         v2 = VI[self.idx_2] if self.idx_2 is not None else 0.0
@@ -86,9 +86,16 @@ class Capacitor(Component):
             v1_prev = V_prev[self.idx_1] if self.idx_1 is not None else 0.0
             v2_prev = V_prev[self.idx_2] if self.idx_2 is not None else 0.0
             
-            # dI/dC = dV/dt using Backward Euler
-            dV_dt = ((v1 - v2) - (v1_prev - v2_prev)) / dt
-            return {self.name: -adj_diff * dV_dt}
+            # Voltage change over this time step
+            dV = (v1 - v2) - (v1_prev - v2_prev)
+            
+            # dI/dC varies based on the integration scheme used
+            if method == 'TR':
+                dI_dC = (2.0 * dV) / dt
+            else:  # 'BE' (Backward Euler)
+                dI_dC = dV / dt
+                
+            return {self.name: -adj_diff * dI_dC}
 
         # 3. DC Analysis
         else:

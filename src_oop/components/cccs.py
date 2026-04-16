@@ -32,7 +32,7 @@ class CCCS(Component):
         if self.idx_2 is not None:
             Y[self.idx_2, b] -= g
 
-    def get_sensitivities(self, VI, PsiPhi, w=0.0, dt=None, V_prev=None):
+    def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Gain (alpha)."""
         if self.ctrl_branch_idx is None: return {}
 
