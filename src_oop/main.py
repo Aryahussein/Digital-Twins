@@ -11,6 +11,7 @@ from core.circuit import Circuit
 from engines.simulator import Simulator
 from utils.plotting import plot_transient, plot_transient_sensitivity, plot_dc_sweep, plot_dc_sensitivity, plot_ac_sensitivity, print_solution, make_bode_plot
 import numpy as np
+from applications.fault_analysis import rank_component_sensitivities, perform_global_ranking, print_fault_table
 
 def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, global_adjoint=False, keep_lus=False):
     """Runs the complete SPICE simulation pipeline.
@@ -53,12 +54,12 @@ if __name__ == "__main__":
     netlist = "rc_transient" # nmos_inverter, rc_lowpass, etc.
     file_path = f"../testfiles/{netlist}.txt"
     target_node = "out" 
-    target_component = "R1" 
+    target_component = "C1" 
 
     # --- Execution ---
     circuit, result = run_simulation_core(
         file_path, 
-        output_nodes=[target_node], 
+        output_nodes=[target_node,"in"], 
         sensitivity=True,
         global_adjoint=False  # Ensure we calculate the global backward integrals for TRAN
     )
@@ -100,6 +101,11 @@ if __name__ == "__main__":
                     name=f"{netlist}_tran_sens"
                 )
         
+            #fault table
+            rank_component_sensitivities(result)
+            all_fault_tables = perform_global_ranking(circuit, result)
+            print_fault_table(all_fault_tables)
+
         # Quick tensor test: Print matrices at first and last time steps
         if result.sensitivities:
             result.sensitivities.print_matrix_at_step(0)
@@ -163,4 +169,4 @@ if __name__ == "__main__":
             print(f"\n=== DC SENSITIVITIES FOR V({target_node}) ===")
             for param in calculated_params:
                 sens_val = result.get_sensitivity(target_node, param)
-                print(f"  d({target_node})/d({param}) = {sens_val:+.6e}")
+                print(f"d({target_node})/d({param}) = {sens_val:+.6e}")

@@ -136,6 +136,13 @@ class AdjointEngine:
         # 2. Allocate the 3D Tensor
         tensor = SensitivityData(sweep_axis, param_names, self.output_nodes, domain=domain)
 
+        # 3. Allocate storage for raw adjoint vectors (needed for fault analysis)
+        # Shape: (n_outputs, n_sweep_steps, total_dim)
+        dtype = complex if is_ac else float
+        tensor.adjoint_vectors = np.zeros(
+            (len(self.output_nodes), num_steps, self.circuit.total_dim), dtype=dtype
+        )
+
         for target_node in self.output_nodes:
             print(f"--- Building Sensitivity Tensor for {domain.upper()} Node '{target_node}' ---")
             o_idx = tensor.output_index[target_node]
@@ -148,7 +155,9 @@ class AdjointEngine:
 
                 # Transposed Solve
                 psi = self._solve_adjoint(list_of_lus[i], target_node, is_complex=is_ac)
-
+                
+                # Store the raw adjoint vector for fault analysis
+                tensor.adjoint_vectors[o_idx, i, :] = psi
                 # Calculate Gradients
                 for comp in self.circuit.components:
                     step_sens = comp.get_sensitivities(

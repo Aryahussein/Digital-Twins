@@ -25,6 +25,10 @@ class SensitivityData:
             names to their row index in the tensor.
         output_index (dict[str, int]): Fast-lookup dictionary mapping output 
             node names to their column index in the tensor.
+        adjoint_vectors (np.ndarray or None): Optional raw adjoint solution vectors 
+            of shape (n_outputs, n_sweep_steps, total_dim). Stored when needed 
+            for fault analysis (shorts require raw ψ at every node, not just 
+            the sensitivity products).
     """
 
     def __init__(self, sweep_axis, param_names, output_nodes, domain="static"):
@@ -46,6 +50,8 @@ class SensitivityData:
 
         self.param_index = {name: idx for idx, name in enumerate(param_names)}
         self.output_index = {name: idx for idx, name in enumerate(output_nodes)}
+        # Raw adjoint vectors (populated optionally for fault analysis)
+        self.adjoint_vectors = None
 
     def get_sweep_series(self, param, output_node):
         """Retrieves the sensitivity array across the entire sweep axis.
