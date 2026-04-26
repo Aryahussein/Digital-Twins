@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Must come before importing pyplot for headless environments
 import matplotlib.pyplot as plt
+from applications.large_change_sensitivity import build_xi, compute_large_change
 
 # ==========================================
 # AC PLOTTING (FREQUENCY DOMAIN)
@@ -220,7 +221,8 @@ def print_solution(result):
         else:
             nodes.append((key, idx))
 
-    V = result.VI
+    # V = result.VI
+    V = result.VI.flatten() if result.VI.ndim > 1 else result.VI
 
     print("Node Voltages:")
     for node, idx in sorted(nodes, key=lambda x: str(x[0])):
@@ -242,3 +244,239 @@ def print_solution(result):
                 mag = np.abs(val)
                 phase = np.degrees(np.angle(val))
                 print(f"  {name:7}: {mag:10.6f} A ∠ {phase:7.2f}°")
+
+
+def plot_fault_comparison(circuit, result, output_node, threshold_results, delta_F,
+                           folder="./figures/fault", name="fault_comparison"):
+    """
+    Plot nominal, shorted, and opened circuit responses on one graph.
+    """
+    import os
+    os.makedirs(folder, exist_ok=True)
+    
+    tensor = result.sensitivities
+    time = tensor.sweep_axis
+    num_steps = len(time)
+    n = circuit.total_dim
+    out_idx = circuit.get_idx(output_node)
+    
+    # --- Get nominal V(out) at every time step ---
+    v_nominal = np.zeros(num_steps)
+    for t_idx in range(num_steps):
+        v = result.VI[t_idx] if result.VI.ndim == 2 else result.VI
+        v_nominal[t_idx] = np.real(v[out_idx])
+    
+    # --- Compute faulted V(out) for the top short ---
+    shorts = threshold_results.get("shorts", [])
+    v_short = None
+    short_label = None
+    short_best_time = None
+    
+    if shorts and shorts[0]['threshold_R'] is not None:
+        s = shorts[0]
+        short_label = f"Short {s['location']} (R={s['threshold_R']:.0f}Ω)"
+        short_best_time = s['best_time']
+        
+        # Parse node indices
+        parts = s['location'].split("<->")
+        n1_name, n2_name = parts[0], parts[1]
+        idx_k = circuit.node_map.get(n1_name)
+        idx_l = circuit.node_map.get(n2_name)
+        if idx_k is None:
+            try: idx_k = circuit.node_map.get(int(n1_name))
+            except ValueError: pass
+        if idx_l is None:
+            try: idx_l = circuit.node_map.get(int(n2_name))
+            except ValueError: pass
+        
+        if idx_k is not None or idx_l is not None:
+            xi_kl = build_xi(n, idx_k, idx_l)
+            R_short = s['threshold_R']
+            
+            v_short = np.zeros(num_steps)
+            for t_idx in range(num_steps):
+                lu = result.list_of_lus[t_idx]
+                v = result.VI[t_idx] if result.VI.ndim == 2 else result.VI
+                delta_v = compute_large_change(lu, xi_kl, v, R_short, out_idx)
+                v_short[t_idx] = np.real(v[out_idx] + delta_v)
+    
+    # --- Compute faulted V(out) for the top open ---
+    opens = threshold_results.get("opens", [])
+    v_open = None
+    open_label = None
+    open_best_time = None
+    
+    if opens and opens[0]['threshold_R'] is not None:
+        o = opens[0]
+        open_label = f"Open {o['location']} (R={o['threshold_R']:.0f}Ω)"
+        open_best_time = o['best_time']
+        
+        # Get component and its nodes
+        comp_name = o['location']
+        base_name = comp_name.split("_")[0] if "_" in comp_name else comp_name
+        comp = circuit.components_dict.get(base_name)
+        
+        if comp is not None:
+            idx_k = getattr(comp, 'idx_1', None) or getattr(comp, 'idx_d', None)
+            idx_l = getattr(comp, 'idx_2', None) or getattr(comp, 'idx_s', None)
+            
+            if idx_k is not None or idx_l is not None:
+                xi_kl = build_xi(n, idx_k, idx_l)
+                R_branch = o['nominal_R']
+                R_eff = o['threshold_R']
+                
+                # Convert to R_added for the formula
+                delta_g = (1.0 / R_eff) - (1.0 / R_branch)
+                if abs(delta_g) > 1e-30:
+                    R_added = 1.0 / delta_g
+                else:
+                    R_added = np.inf
+                
+                v_open = np.zeros(num_steps)
+                for t_idx in range(num_steps):
+                    lu = result.list_of_lus[t_idx]
+                    v = result.VI[t_idx] if result.VI.ndim == 2 else result.VI
+                    delta_v = compute_large_change(lu, xi_kl, v, R_added, out_idx)
+                    v_open[t_idx] = np.real(v[out_idx] + delta_v)
+    
+    # --- Plot ---
+    fig, ax = plt.subplots(figsize=(8, 5))
+    
+    # Nominal response
+    ax.plot(time, v_nominal, 'b-', lw=2, label=f'Nominal V({output_node})')
+    
+    # Tolerance band
+    ax.fill_between(time, v_nominal - delta_F, v_nominal + delta_F,
+                     alpha=0.15, color='blue', label=f'±{delta_F}V tolerance')
+    
+    # Short response
+    if v_short is not None:
+        ax.plot(time, v_short, 'r--', lw=1.5, label=short_label)
+        if short_best_time is not None:
+            ax.axvline(x=short_best_time, color='red', ls=':', alpha=0.5)
+    
+    # Open response
+    if v_open is not None:
+        ax.plot(time, v_open, 'g-.', lw=1.5, label=open_label)
+        if open_best_time is not None:
+            ax.axvline(x=open_best_time, color='green', ls=':', alpha=0.5)
+    
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Voltage (V)')
+    ax.set_title(f'Fault Comparison at V({output_node}) | δF = {delta_F}V')
+    ax.legend(loc='best', fontsize=8)
+    ax.grid(True, ls='--', alpha=0.5)
+    
+    fig.tight_layout()
+    fig.savefig(f"{folder}/{name}.png", dpi=600)
+    plt.close(fig)
+    print(f"Fault comparison plot saved to {folder}/{name}.png")
+
+
+def plot_all_faults(circuit, result, output_node, threshold_results, delta_F,
+                     folder="./figures/fault", name="all_faults"):
+    """
+    Plot nominal response with ALL faulted responses (not just top one).
+    Each short and open gets its own curve.
+    """
+    import os
+    os.makedirs(folder, exist_ok=True)
+    
+    tensor = result.sensitivities
+    time = tensor.sweep_axis
+    num_steps = len(time)
+    n = circuit.total_dim
+    out_idx = circuit.get_idx(output_node)
+    
+    # Get nominal V(out)
+    v_nominal = np.zeros(num_steps)
+    for t_idx in range(num_steps):
+        v = result.VI[t_idx] if result.VI.ndim == 2 else result.VI
+        v_nominal[t_idx] = np.real(v[out_idx])
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Nominal + tolerance band
+    ax.plot(time, v_nominal, 'b-', lw=2, label=f'Nominal V({output_node})')
+    ax.fill_between(time, v_nominal - delta_F, v_nominal + delta_F,
+                     alpha=0.1, color='blue', label=f'±{delta_F}V tolerance')
+    
+    # Plot each short
+    shorts = threshold_results.get("shorts", [])
+    for i, s in enumerate(shorts):
+        if s['threshold_R'] is None:
+            continue
+        
+        parts = s['location'].split("<->")
+        n1_name, n2_name = parts[0], parts[1]
+        idx_k = circuit.node_map.get(n1_name)
+        idx_l = circuit.node_map.get(n2_name)
+        if idx_k is None:
+            try: idx_k = circuit.node_map.get(int(n1_name))
+            except ValueError: pass
+        if idx_l is None:
+            try: idx_l = circuit.node_map.get(int(n2_name))
+            except ValueError: pass
+        
+        if idx_k is None and idx_l is None:
+            continue
+        
+        xi_kl = build_xi(n, idx_k, idx_l)
+        v_faulted = np.zeros(num_steps)
+        for t_idx in range(num_steps):
+            lu = result.list_of_lus[t_idx]
+            v = result.VI[t_idx] if result.VI.ndim == 2 else result.VI
+            delta_v = compute_large_change(lu, xi_kl, v, s['threshold_R'], out_idx)
+            v_faulted[t_idx] = np.real(v[out_idx] + delta_v)
+        
+        ax.plot(time, v_faulted, '--', lw=1.2,
+                label=f"Short {s['location']} ({s['threshold_R']:.0f}Ω)")
+    
+    # Plot each open
+    opens = threshold_results.get("opens", [])
+    for i, o in enumerate(opens):
+        if o['threshold_R'] is None:
+            continue
+        
+        comp_name = o['location']
+        base_name = comp_name.split("_")[0] if "_" in comp_name else comp_name
+        comp = circuit.components_dict.get(base_name)
+        
+        if comp is None:
+            continue
+        
+        idx_k = getattr(comp, 'idx_1', None) or getattr(comp, 'idx_d', None)
+        idx_l = getattr(comp, 'idx_2', None) or getattr(comp, 'idx_s', None)
+        
+        if idx_k is None and idx_l is None:
+            continue
+        
+        xi_kl = build_xi(n, idx_k, idx_l)
+        R_branch = o['nominal_R']
+        R_eff = o['threshold_R']
+        
+        delta_g = (1.0 / R_eff) - (1.0 / R_branch)
+        if abs(delta_g) < 1e-30:
+            continue
+        R_added = 1.0 / delta_g
+        
+        v_faulted = np.zeros(num_steps)
+        for t_idx in range(num_steps):
+            lu = result.list_of_lus[t_idx]
+            v = result.VI[t_idx] if result.VI.ndim == 2 else result.VI
+            delta_v = compute_large_change(lu, xi_kl, v, R_added, out_idx)
+            v_faulted[t_idx] = np.real(v[out_idx] + delta_v)
+        
+        ax.plot(time, v_faulted, '-.', lw=1.2,
+                label=f"Open {o['location']} ({o['threshold_R']:.0f}Ω)")
+    
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Voltage (V)')
+    ax.set_title(f'All Fault Responses at V({output_node}) | δF = {delta_F}V')
+    ax.legend(loc='best', fontsize=7)
+    ax.grid(True, ls='--', alpha=0.5)
+    
+    fig.tight_layout()
+    fig.savefig(f"{folder}/{name}.png", dpi=600)
+    plt.close(fig)
+    print(f"All faults plot saved to {folder}/{name}.png")

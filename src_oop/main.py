@@ -9,9 +9,10 @@ numerical engines, and visualizing the results.
 from utils.parser import NetlistParser
 from core.circuit import Circuit
 from engines.simulator import Simulator
-from utils.plotting import plot_transient, plot_transient_sensitivity, plot_dc_sweep, plot_dc_sensitivity, plot_ac_sensitivity, print_solution, make_bode_plot
+from utils.plotting import plot_transient, plot_transient_sensitivity, plot_dc_sweep, plot_dc_sensitivity, plot_ac_sensitivity, print_solution, make_bode_plot,plot_fault_comparison, plot_all_faults
 import numpy as np
-from applications.fault_analysis import rank_component_sensitivities, perform_global_ranking, print_fault_table
+from applications.fault_analysis import rank_component_sensitivities, perform_global_ranking, print_fault_table,compute_fault_thresholds, print_threshold_table
+
 
 def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, global_adjoint=False, keep_lus=False):
     """Runs the complete SPICE simulation pipeline.
@@ -53,14 +54,16 @@ if __name__ == "__main__":
     # --- Configuration ---
     netlist = "rc_transient" # nmos_inverter, rc_lowpass, etc.
     file_path = f"../testfiles/{netlist}.txt"
-    target_node = "out" 
+    target_node = "out"
     target_component = "C1" 
 
     # --- Execution ---
+    output_nodes = ["in","out"]
     circuit, result = run_simulation_core(
         file_path, 
-        output_nodes=[target_node,"in"], 
+        output_nodes=output_nodes, 
         sensitivity=True,
+        keep_lus=True,
         global_adjoint=False  # Ensure we calculate the global backward integrals for TRAN
     )
 
@@ -101,10 +104,20 @@ if __name__ == "__main__":
                     name=f"{netlist}_tran_sens"
                 )
         
-            #fault table
-            rank_component_sensitivities(result)
-            all_fault_tables = perform_global_ranking(circuit, result)
-            print_fault_table(all_fault_tables)
+        #fault table ranking
+        rank_component_sensitivities(result)
+        all_fault_tables = perform_global_ranking(circuit, result)
+        print_fault_table(all_fault_tables)
+
+        # Short thresholds (delta_F = output tolerance in volts)
+        delta_F = 0.1
+        for node in output_nodes:
+            thresholds = compute_fault_thresholds(circuit, result, node, delta_F)
+            print_threshold_table(thresholds)
+            plot_fault_comparison(circuit, result, node, thresholds, delta_F,
+                                folder="../figures/fault", name=f"{netlist}_fault_{node}")
+            plot_all_faults(circuit, result, node, thresholds, delta_F,
+                            folder="../figures/fault", name=f"{netlist}_all_faults_{node}")
 
         # Quick tensor test: Print matrices at first and last time steps
         if result.sensitivities:
@@ -132,6 +145,15 @@ if __name__ == "__main__":
                 folder="../figures/ac", 
                 name=f"{netlist}_ac_sens"
             )
+        # ---- FAULT ANALYSIS ----
+        rank_component_sensitivities(result)
+        all_fault_tables = perform_global_ranking(circuit, result)
+        print_fault_table(all_fault_tables)
+
+        delta_F = 0.1
+        for node in output_nodes:
+            thresholds = compute_fault_thresholds(circuit, result, node, delta_F=delta_F)
+            print_threshold_table(thresholds)
 
     # ==========================================
     # DC SWEEP ANALYSIS
@@ -154,6 +176,17 @@ if __name__ == "__main__":
                 folder="../figures/dc", 
                 name=f"{netlist}_dc_sens"
             )
+         # ---- FAULT ANALYSIS ----
+        rank_component_sensitivities(result)
+        all_fault_tables = perform_global_ranking(circuit, result)
+        print_fault_table(all_fault_tables)
+
+        delta_F = 0.1
+        for node in output_nodes:
+            thresholds = compute_fault_thresholds(circuit, result, node, delta_F=delta_F)
+            print_threshold_table(thresholds)
+            plot_fault_comparison(circuit, result, node, thresholds, delta_F,
+                                  folder="../figures/fault", name=f"{netlist}_fault_{node}")
 
     # ==========================================
     # DC OPERATING POINT (.OP)
@@ -170,3 +203,13 @@ if __name__ == "__main__":
             for param in calculated_params:
                 sens_val = result.get_sensitivity(target_node, param)
                 print(f"d({target_node})/d({param}) = {sens_val:+.6e}")
+
+        # ---- FAULT ANALYSIS ----
+        rank_component_sensitivities(result)
+        all_fault_tables = perform_global_ranking(circuit, result)
+        print_fault_table(all_fault_tables)
+
+        delta_F = 0.1
+        for node in output_nodes:
+            thresholds = compute_fault_thresholds(circuit, result, node, delta_F=delta_F)
+            print_threshold_table(thresholds)
