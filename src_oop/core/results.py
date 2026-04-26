@@ -46,7 +46,9 @@ class SensitivityData:
         self.param_names = list(param_names)
         self.output_nodes = list(output_nodes)
 
-        self.data = np.zeros((len(param_names), len(output_nodes), len(self.sweep_axis)))
+        # self.data = np.zeros((len(param_names), len(output_nodes), len(self.sweep_axis)))
+        dtype = complex if domain == "frequency" else float
+        self.data = np.zeros((len(param_names), len(output_nodes), len(self.sweep_axis)), dtype=dtype)
 
         self.param_index = {name: idx for idx, name in enumerate(param_names)}
         self.output_index = {name: idx for idx, name in enumerate(output_nodes)}

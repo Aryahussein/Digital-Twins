@@ -19,14 +19,14 @@ class Mosfet(Component):
                 "Subclasses of MOS must define a 'POLARITY' constant."
             )
 
-        @property
-        def differentiable_params(self):
-            """Overrides the base Component property to advertise MOS-specific parameters."""
-            return [
-                f"{self.name}_W",
-                f"{self.name}_L",
-                f"{self.name}_VTO"
-            ]
+    @property
+    def differentiable_params(self):
+        """Overrides the base Component property to advertise MOS-specific parameters."""
+        return [
+            f"{self.name}_W",
+            f"{self.name}_L",
+            f"{self.name}_VTO"
+        ]
     
     def bind_nodes(self, node_map):
         self.idx_d = node_map.get(self.data.get("n_d", 0))
@@ -57,6 +57,7 @@ class Mosfet(Component):
         
         res = models.evaluate_nmos(vgs, vds, self.VTO, self.Bn)
         Id, gm, gds = res["I_D"], res["gm"], res["gds"]
+        self._last_gds = gds
 
         ieq = (Id - gm * vgs - gds * vds) * self.POLARITY
 

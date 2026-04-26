@@ -5,4 +5,3 @@ C1 out 0 1e-7
 
 .TRAN 10e-6 4e-3
 
-.OPTIONS METHOD=BE
