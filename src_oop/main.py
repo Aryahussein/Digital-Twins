@@ -52,13 +52,13 @@ def run_simulation_core(netlist_path, output_nodes=None, sensitivity=False, glob
 
 if __name__ == "__main__":
     # --- Configuration ---
-    netlist = "rc_transient" # nmos_inverter, rc_lowpass, etc.
+    netlist = "test_book_sensitivity" # nmos_inverter, rc_lowpass, etc.
     file_path = f"../testfiles/{netlist}.txt"
-    target_node = "out"
-    target_component = "C1" 
+    target_node = 2
+    target_component = "R5" 
 
     # --- Execution ---
-    output_nodes = ["in","out"]
+    output_nodes = [1,2]
     circuit, result = run_simulation_core(
         file_path, 
         output_nodes=output_nodes, 

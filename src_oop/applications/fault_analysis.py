@@ -114,14 +114,96 @@ def perform_global_ranking(circuit, result):
         o_idx = tensor.output_index[out_node]
         node_faults = []
 
-        # --- 1. Open Faults (from sensitivity waveforms) ---
-        for p_name in tensor.param_names:
-            s_waveform = tensor.get_sweep_series(p_name, out_node)
-            peak_idx = np.argmax(np.abs(s_waveform))
+        # --- 1. Open Faults (phi_b × i_b for each component branch) ---
+        # For opens, rank by |phi_b × i_b| where:
+        #   i_b = forward branch current through the component
+        #   phi_b = adjoint branch current through the component
+        # This gives uniform units (A^2) across all component types.
+        num_steps = vi_nom.shape[0] if vi_nom.ndim == 2 else 1
+        dt = tensor.sweep_axis[1] - tensor.sweep_axis[0] if len(tensor.sweep_axis) > 1 else 1.0
+        
+        for comp in circuit.components:
+            # Skip independent sources — they can't "open" in the conductance sense
+            if comp.type in ["V", "I"]:
+                continue
+            
+            # Compute forward branch current and adjoint branch current
+            if comp.type == "R":
+                idx_i = getattr(comp, 'idx_1', None)
+                idx_j = getattr(comp, 'idx_2', None)
+                vi = vi_nom[:, idx_i] if idx_i is not None else 0.0
+                vj = vi_nom[:, idx_j] if idx_j is not None else 0.0
+                pi = psi_nom[o_idx, :, idx_i] if idx_i is not None else 0.0
+                pj = psi_nom[o_idx, :, idx_j] if idx_j is not None else 0.0
+                
+                i_b = (vi - vj) / comp.value
+                phi_b = (pi - pj)
+                
+            elif comp.type == "C":
+                idx_i = getattr(comp, 'idx_1', None)
+                idx_j = getattr(comp, 'idx_2', None)
+                vi = vi_nom[:, idx_i] if idx_i is not None else 0.0
+                vj = vi_nom[:, idx_j] if idx_j is not None else 0.0
+                pi = psi_nom[o_idx, :, idx_i] if idx_i is not None else 0.0
+                pj = psi_nom[o_idx, :, idx_j] if idx_j is not None else 0.0
+                
+                g_eq = 2.0 * comp.value / dt if dt > 0 else comp.value
+                i_b = g_eq * (vi - vj)
+                phi_b = (pi - pj)
+                
+            elif comp.type == "L":
+                branch_idx = getattr(comp, 'branch_idx', None)
+                if branch_idx is None:
+                    continue
+                idx_i = getattr(comp, 'idx_1', None)
+                idx_j = getattr(comp, 'idx_2', None)
+                
+                i_b = vi_nom[:, branch_idx]
+                phi_b = psi_nom[o_idx, :, branch_idx]
+                
+            elif comp.type in ["M_NMOS", "M_PMOS"]:
+                idx_d = getattr(comp, 'idx_d', None)
+                idx_g = getattr(comp, 'idx_g', None)
+                idx_s = getattr(comp, 'idx_s', None)
+                
+                # Compute I_D from the model at each time step
+                from core.models import evaluate_nmos
+                open_impact = np.zeros(num_steps)
+                for t_idx in range(num_steps):
+                    v = vi_nom[t_idx] if vi_nom.ndim == 2 else vi_nom
+                    vd = v[idx_d] if idx_d is not None else 0.0
+                    vg = v[idx_g] if idx_g is not None else 0.0
+                    vs = v[idx_s] if idx_s is not None else 0.0
+                    vgs = comp.POLARITY * (vg - vs)
+                    vds = comp.POLARITY * (vd - vs)
+                    res = evaluate_nmos(vgs, vds, comp.VTO, comp.Bn)
+                    i_d = res["I_D"]
+                    
+                    psi_d = psi_nom[o_idx, t_idx, idx_d] if idx_d is not None else 0.0
+                    psi_s = psi_nom[o_idx, t_idx, idx_s] if idx_s is not None else 0.0
+                    phi_ds = (psi_d - psi_s)
+                    
+                    open_impact[t_idx] = i_d * phi_ds
+                
+                peak_idx = np.argmax(np.abs(open_impact))
+                node_faults.append({
+                    "type": "Open",
+                    "location": comp.name,
+                    "impact": open_impact[peak_idx],
+                    "time": tensor.sweep_axis[peak_idx]
+                })
+                continue
+            
+            else:
+                continue
+            
+            # Compute phi_b × i_b waveform for R, C, L
+            open_impact = i_b * phi_b
+            peak_idx = np.argmax(np.abs(open_impact))
             node_faults.append({
                 "type": "Open",
-                "location": p_name,
-                "impact": s_waveform[peak_idx],
+                "location": comp.name,
+                "impact": open_impact[peak_idx],
                 "time": tensor.sweep_axis[peak_idx]
             })
 
