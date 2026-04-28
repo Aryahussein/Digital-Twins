@@ -7,8 +7,6 @@ class OpAmp(Component):
     V(out, gnd) = Gain * (V(n_plus) - V(n_minus))
     """
 
-    IS_NONLINEAR = True
-
     def bind_nodes(self, node_map):
         # Input terminals
         self.idx_p = node_map.get(self.data.get("n1", 0)) # Non-inverting (+)
@@ -23,6 +21,9 @@ class OpAmp(Component):
         # High open-loop gain (default 100k if not specified)
         self.gain = self.data.get("value", 1e5)
 
+    # ==========================================
+    # SOLVER ENGINES (Stamping)
+    # ==========================================
     def stamp_mna_connection(self, Y):
         """
         Stamps the VCVS MNA equations.
@@ -41,15 +42,9 @@ class OpAmp(Component):
         if self.idx_m is not None:
             Y[self.branch_idx, self.idx_m] += self.gain
 
-    # def stamp_static(self, Y, sources):
-    #     # RHS for an ideal Op-Amp is typically 0 (homogeneous equation)
-    #     if self.branch_idx is not None:
-    #         sources[self.branch_idx] = 0.0
-
-    # # AC and Transient inherit from static
-    # def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
-    # def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
-
+    # ==========================================
+    # SENSITIVITY ENGINES (Adjoint & Woodbury)
+    # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Open-Loop Gain (A)."""
         if self.branch_idx is None: return {}
@@ -64,3 +59,29 @@ class OpAmp(Component):
 
         # Adjoint formula: Psi_branch * (V_plus - V_minus)
         return {self.name: psi_branch * v_diff}
+
+    def stamp_PQ(self, P, Q, col_idx):
+        """Stamps the VCVS topology for Woodbury updates.
+        
+        Injection (P): The auxiliary branch equation row.
+        Extraction (Q): The differential input voltage (V_plus - V_minus).
+        """
+        b = self.branch_idx
+        p, m = self.idx_p, self.idx_m
+        
+        # P: The gain parameter lives entirely inside the KVL branch equation row
+        if b is not None: 
+            P[b, col_idx] = 1.0
+            
+        # Q: The state variable multiplying the gain is (V_plus - V_minus)
+        if p is not None: Q[p, col_idx] = 1.0
+        if m is not None: Q[m, col_idx] = -1.0
+
+    def get_delta_y(self, param_name, dp, **kwargs):
+        """Transforms a physical parameter change into a scalar Admittance change.
+        
+        Because the KVL equation is V_out - A * (V_p - V_m) = 0, the gain A 
+        is stamped as a negative multiplier for V_p. Therefore, if the gain 
+        shifts by dp, the matrix shifts by -dp.
+        """
+        return -dp

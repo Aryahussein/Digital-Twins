@@ -9,6 +9,7 @@ point summaries.
 
 import numpy as np
 import matplotlib
+import os
 
 matplotlib.use("Agg")  # Must come before importing pyplot for headless environments
 import matplotlib.pyplot as plt
@@ -642,3 +643,80 @@ def plot_all_faults(
     fig.savefig(f"{folder}/{name}.png", dpi=600)
     plt.close(fig)
     print(f"All faults plot saved to {folder}/{name}.png")
+
+def plot_worst_case_corners(lc_data, target_node, spec_min, spec_max, tolerance_pct, folder, name, step_idx=-1):
+    """
+    Plots the Sensitivity-Directed Worst-Case (SDWC) Analysis.
+    
+    Args:
+        lc_data (LargeChangeData): The output from the Woodbury Large Change Engine.
+        target_node (str): The node to plot.
+        spec_min (float): The minimum passing voltage specification.
+        spec_max (float): The maximum passing voltage specification.
+        tolerance_pct (float): The factory tolerance (e.g., 0.05 for 5%).
+        folder (str): Output directory.
+        name (str): File name.
+        step_idx (int): The sweep step to evaluate. Use 0 for .OP, or -1 for the end of .TRAN/.DC
+    """
+    os.makedirs(folder, exist_ok=True)
+    
+    alpha_sweep = lc_data.alpha_axis
+    v_out = lc_data(node=target_node, step_idx=step_idx)
+    
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=150)
+
+    # Highlight the passing specification region
+    ax.fill_between(alpha_sweep * 100, spec_min, spec_max, 
+                    color='#d4edda', alpha=0.5, label="Passing Spec Region")
+
+    # Plot the calculated Woodbury Voltage Curve
+    ax.plot(alpha_sweep * 100, v_out, linewidth=3, color='#1f77b4', 
+            label="Worst-Case Output Voltage")
+
+    # Plot Spec Limit Boundary Lines
+    ax.axhline(spec_max, color='#d62728', linestyle='--', linewidth=2, label=f"Spec Max ({spec_max}V)")
+    ax.axhline(spec_min, color='#d62728', linestyle='--', linewidth=2, label=f"Spec Min ({spec_min}V)")
+
+    # Nominal Design Point (alpha = 0)
+    nominal_idx = np.argmin(np.abs(alpha_sweep))
+    ax.plot(0, v_out[nominal_idx], 'ko', markersize=8, zorder=5, 
+            label=f"Nominal Design ({v_out[nominal_idx]:.2f}V)")
+
+    # Find indices for the specific Tolerance Corners
+    tol_pos_idx = np.argmin(np.abs(alpha_sweep - tolerance_pct))
+    tol_neg_idx = np.argmin(np.abs(alpha_sweep - (-tolerance_pct)))
+
+    # Plot the extremes
+    ax.plot(tolerance_pct * 100, v_out[tol_pos_idx], 'mo', markersize=9, zorder=5, 
+            label=f"Worst-Case Corner (+{tolerance_pct*100:.0f}%)")
+    ax.plot(-tolerance_pct * 100, v_out[tol_neg_idx], 'ro', markersize=9, zorder=5, 
+            label=f"Worst-Case Corner (-{tolerance_pct*100:.0f}%)")
+
+    # Add vertical bounds for visual clarity
+    ax.axvline(tolerance_pct * 100, color='gray', linestyle=':', linewidth=1.5)
+    ax.axvline(-tolerance_pct * 100, color='gray', linestyle=':', linewidth=1.5)
+
+    # formatting & Pass/Fail Evaluation
+    ax.set_title("Sensitivity-Directed Worst-Case (SDWC) Analysis", fontsize=14, fontweight='bold', pad=15)
+    ax.set_xlabel("Global Parameter Variation (α %)", fontsize=12, fontweight='bold')
+    ax.set_ylabel(f"V({target_node}) [V]", fontsize=12, fontweight='bold')
+    ax.grid(True, linestyle='--', alpha=0.6)
+    
+    # Place legend outside the main data area
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, framealpha=0.9)
+
+    # Evaluate absolute pass/fail boundary
+    if v_out[tol_neg_idx] >= spec_min and v_out[tol_pos_idx] <= spec_max:
+        status_text = "STATUS: PASS (100% Guaranteed Yield)"
+        text_color = 'green'
+    else:
+        status_text = "STATUS: FAIL (Boundary exceeds spec)"
+        text_color = 'red'
+
+    ax.text(0.02, 0.04, status_text, transform=ax.transAxes, fontsize=12, 
+            fontweight='bold', color=text_color,
+            bbox=dict(facecolor='white', alpha=0.9, edgecolor=text_color, boxstyle='round,pad=0.5'))
+
+    plt.tight_layout()
+    fig.savefig(os.path.join(folder, f"{name}.png"), dpi=600)
+    plt.close()

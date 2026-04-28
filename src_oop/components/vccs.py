@@ -9,6 +9,9 @@ class VCCS(Component):
         self.idx_3 = node_map.get(self.data.get("n3", 0)) # Control +
         self.idx_4 = node_map.get(self.data.get("n4", 0)) # Control -
 
+    # ==========================================
+    # SOLVER ENGINES (Stamping)
+    # ==========================================
     def stamp_static(self, Y):
         g = self.value # The transconductance
         i, j, k, l = self.idx_1, self.idx_2, self.idx_3, self.idx_4
@@ -24,9 +27,11 @@ class VCCS(Component):
             if l is not None: Y[j, l] += g
 
     # AC and Transient inherit from static as the gain is frequency independent.
-    # def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
-    # def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
+    # The Simulator engine will automatically use stamp_static if stamp_ac/stamp_transient are not overridden.
 
+    # ==========================================
+    # SENSITIVITY ENGINES (Adjoint & Woodbury)
+    # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """
         Calculates sensitivity w.r.t the Transconductance (G).
@@ -47,3 +52,25 @@ class VCCS(Component):
         sens_g = -(psi_output * v_control)
 
         return {self.name: sens_g}
+
+    def stamp_PQ(self, P, Q, col_idx):
+        """Stamps the VCCS topology for Woodbury updates. 
+        
+        Injection (P): Output Nodes. 
+        Extraction (Q): Control Nodes.
+        """
+        out1, out2 = self.idx_1, self.idx_2
+        c1, c2 = self.idx_3, self.idx_4 
+        
+        if out1 is not None: P[out1, col_idx] = 1.0
+        if out2 is not None: P[out2, col_idx] = -1.0
+        if c1 is not None: Q[c1, col_idx] = 1.0
+        if c2 is not None: Q[c2, col_idx] = -1.0
+
+    def get_delta_y(self, param_name, dp, **kwargs):
+        """Transforms a physical parameter change into a scalar Admittance change.
+        
+        Because transconductance (G) is stamped directly into the Y-matrix as a 
+        linear multiplier, Delta Y is exactly equal to the parameter shift dp.
+        """
+        return dp

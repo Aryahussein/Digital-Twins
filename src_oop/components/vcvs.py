@@ -2,7 +2,7 @@ from .base import Component
 
 class VCVS(Component):
     """
-    GVoltage-Controlled Voltage Source (Type 'E').
+    Voltage-Controlled Voltage Source (Type 'E').
     V(n1, n2) = Gain * V(n3, n4)
     """
 
@@ -14,6 +14,9 @@ class VCVS(Component):
         self.branch_idx = node_map.get(self.name)
         self.gain = self.value
 
+    # ==========================================
+    # SOLVER ENGINES (Stamping)
+    # ==========================================
     def stamp_mna_connection(self, Y):
         if self.branch_idx is None: return
         
@@ -33,6 +36,9 @@ class VCVS(Component):
         if self.idx_4 is not None:
             Y[b, self.idx_4] += self.gain
 
+    # ==========================================
+    # SENSITIVITY ENGINES (Adjoint & Woodbury)
+    # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Gain."""
         if self.branch_idx is None: return {}
@@ -44,3 +50,28 @@ class VCVS(Component):
         psi_branch = PsiPhi[self.branch_idx]
 
         return {self.name: psi_branch * v_control}
+
+    def stamp_PQ(self, P, Q, col_idx):
+        """Stamps the VCVS topology for Woodbury updates. 
+        
+        Injection (P): The auxiliary branch equation row.
+        Extraction (Q): The differential control voltage (V3 - V4).
+        """
+        b = self.branch_idx
+        c1, c2 = self.idx_3, self.idx_4 
+        
+        # P: The gain parameter is stamped into the KVL branch equation row
+        if b is not None: P[b, col_idx] = 1.0
+        
+        # Q: The state variable multiplying the gain is (V_ctrl+ - V_ctrl-)
+        if c1 is not None: Q[c1, col_idx] = 1.0
+        if c2 is not None: Q[c2, col_idx] = -1.0
+
+    def get_delta_y(self, param_name, dp, **kwargs):
+        """Transforms a physical parameter change into a scalar Admittance change.
+        
+        Because the KVL equation is V_out - Gain * (V_ctrl) = 0, the Gain 
+        is stamped as a negative multiplier. Therefore, if the gain shifts 
+        by dp, the matrix shifts by -dp.
+        """
+        return -dp

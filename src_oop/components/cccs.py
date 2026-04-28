@@ -45,3 +45,28 @@ class CCCS(Component):
         psi_output = p1 - p2
 
         return {self.name: -(psi_output * i_ctrl)}
+
+    def stamp_PQ(self, P, Q, col_idx):
+        """Stamps the CCCS topology. 
+        
+        Current Injection (P): Output nodes.
+        State Extraction (Q): Controlling branch current.
+        """
+        out1, out2 = self.idx_1, self.idx_2
+        b_ctrl = self.ctrl_branch_idx 
+        
+        # P: Where does the current get injected?
+        if out1 is not None: P[out1, col_idx] = 1.0
+        if out2 is not None: P[out2, col_idx] = -1.0
+        
+        # Q: What is the state variable controlling the source?
+        # For a CCCS, it's the current flowing through the controlling branch!
+        if b_ctrl is not None: Q[b_ctrl, col_idx] = 1.0
+
+    def get_delta_y(self, param_name, dp, **kwargs):
+        """Transforms a physical parameter change into a scalar Admittance change.
+        
+        For a CCCS, the parameter is the Gain. Because the gain is stamped 
+        directly as a linear multiplier in the Y-matrix, Delta Y is exactly dp.
+        """
+        return dp
