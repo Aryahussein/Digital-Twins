@@ -80,6 +80,53 @@ def solve_adjoint(lu, target, circuit):
         
     return lu.solve(d, trans='T')
 
+class WoodburyLinearStrategy:
+    """
+    Dynamically extracts topologies from sparse matrix differences 
+    and solves the system using the Sherman-Morrison-Woodbury identity.
+    """
+    def __init__(self, Y_base_csc, lu_base):
+        self.Y_base = Y_base_csc
+        self.lu = lu_base
+        self.N = Y_base_csc.shape[0]
+
+    def __call__(self, y_iter_csc, sources_iter):
+        # 1. Find exact mathematical difference (Parameter Shifts + Nonlinear Updates)
+        delta_Y = y_iter_csc - self.Y_base
+        rows, cols = delta_Y.nonzero()
+        k = len(rows)
+
+        # Fast paths
+        if k == 0:
+            return self.lu, self.lu.solve(sources_iter)
+            
+        # Fallback: If >25% of the matrix changed, LU factorization is faster than Woodbury
+        if k > self.N / 4:
+            return solve_linear_circuit(y_iter_csc, sources_iter)
+
+        # 2. Dynamic Topology Building (Low Rank Extraction)
+        P = np.zeros((self.N, k))
+        Q = np.zeros((self.N, k))
+        D = np.zeros((k, k), dtype=y_iter_csc.dtype)
+
+        for i, (r, c) in enumerate(zip(rows, cols)):
+            P[r, i] = 1.0
+            Q[c, i] = 1.0
+            D[i, i] = delta_Y[r, c]
+
+        # 3. Sherman-Morrison-Woodbury Core
+        V_n = self.lu.solve(sources_iter)
+        X = self.lu.solve(P)
+        
+        QT_V = Q.T @ V_n
+        QT_X = Q.T @ X
+        
+        M = np.eye(k) + D @ QT_X
+        inv_M = np.linalg.inv(M)
+        dV = -X @ (inv_M @ (D @ QT_V))
+        
+        return self.lu, V_n + dV
+
 
 # =========================================================================
 # NONLINEAR SOLVER

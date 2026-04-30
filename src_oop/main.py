@@ -24,6 +24,7 @@ from utils.plotting import (
     plot_fault_comparison,
     plot_all_faults,
     plot_worst_case_corners,
+    plot_combined_yield_pdf,
 )
 import numpy as np
 from applications.fault_analysis import (
@@ -34,7 +35,7 @@ from applications.fault_analysis import (
     print_threshold_table,
 )
 
-from applications.yield_analysis import generate_worst_case_deltas
+from applications.yield_analysis import perform_sdwc_yield_analysis, calculate_analytical_yield
 
 
 def run_simulation_core(
@@ -85,7 +86,7 @@ if __name__ == "__main__":
     netlist = "rc_transient"  # e.g., nmos_inverter, 1T1C_dram_cell
     file_path = f"../testfiles/{netlist}.txt"
     
-    output_nodes = ["in", "out"]
+    output_nodes = ["out"]
     target_node = "out"
     target_component = "C1"
     
@@ -98,6 +99,10 @@ if __name__ == "__main__":
     radiation_sim = False      # Specific transient radiation feature
     fault_analysis = False     # Ranking and Thresholding
     yield_analysis = True      # SDWC Woodbury analysis
+
+    # --- Yield Analysis Settings ---
+    # Set to an integer (e.g., 50) to evaluate a specific step, or None for Auto-Adjoint detection
+    user_eval_step = None
 
     # ==========================================
     # 2. EXECUTION CORE
@@ -189,48 +194,17 @@ if __name__ == "__main__":
     # ==========================================
     # 6. YIELD ANALYSIS (SDWC Woodbury)
     # ==========================================
-    if yield_analysis and result.sensitivities and result.list_of_lus:
-        print("\n=== EXECUTING SDWC YIELD ANALYSIS ===")
+    if yield_analysis:
 
-        # Determine the appropriate step index to evaluate based on analysis type
-        eval_step = 0
-        if result.type == ".TRAN":
-            # Don't grab the end of time (-1) if the pulse turns off!
-            # Instead, find the index of the PEAK voltage during the nominal run.
-            n_idx = result.node_map[target_node]
-            nominal_waveform = np.array([V[n_idx] for V in result.VI])
-            eval_step = np.argmax(nominal_waveform) 
-            print(f"Evaluating TRAN yield at peak voltage (Step {eval_step})")
-        else:
-            # .AC / .DC / .OP -> evaluate at the start (0)
-            eval_step = 0
-        
-        alpha_sweep = np.linspace(-0.20, 0.20, 50)
-        factory_tolerance = 0.05  # 5% target check
-        
-        # Determine integration method if transient
-        method = getattr(result, "method", "TR") if result.type == ".TRAN" else "TR"
-        
-        params, dp_matrix = generate_worst_case_deltas(
-            circuit=circuit, sensitivities=result.sensitivities,
-            target_node=target_node, alpha_array=alpha_sweep, k=2
+        perform_sdwc_yield_analysis(
+            circuit=circuit,
+            result=result,
+            target_node=target_node,
+            calculated_params=calculated_params,
+            netlist_name=netlist,
+            folder_map=folder_map,
+            user_eval_step=None, 
+            factory_tolerance=0.05,
+            k_params=2
         )
         
-        engine = LargeChangeEngine(circuit)
-        lc_results = engine.compute(
-            result=result, param_names=params, dp_matrix=dp_matrix,
-            variation_axis=alpha_sweep, method=method
-        )
-        
-        # Plot using the generic yield function (checks the final step index by default)
-        plot_worst_case_corners(
-                lc_data=lc_results, 
-                target_node=target_node,
-                spec_min=0.90, 
-                spec_max=1.10, 
-                tolerance_pct=factory_tolerance,
-                folder="../figures/yield", 
-                name=f"{netlist}_{folder_map.get(result.type, 'misc')}_sdwc_yield",
-                step_idx=eval_step  # <--- Pass the dynamic peak index here!
-            )
-        print("Yield analysis complete. Plot saved to ../figures/yield/")

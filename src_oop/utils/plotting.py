@@ -14,6 +14,7 @@ import os
 matplotlib.use("Agg")  # Must come before importing pyplot for headless environments
 import matplotlib.pyplot as plt
 from applications.large_change_sensitivity import build_xi, compute_large_change
+from scipy.stats import norm
 
 # ==========================================
 # AC PLOTTING (FREQUENCY DOMAIN)
@@ -99,11 +100,10 @@ def plot_ac_sensitivity(
 # TRANSIENT PLOTTING (TIME DOMAIN)
 # ==========================================
 
-
 def plot_transient(
-    result, output_nodes=None, folder="./figures/tran", name="transient"
+    result, output_nodes=None, folder="./figures/tran", name="transient", mark_step=None
 ):
-    """Plots standard Voltage vs Time waveforms."""
+    """Plots standard Voltage vs Time waveforms, with an optional evaluation marker."""
     print(f"Plotting transient response...")
 
     time = result.sweep_axis
@@ -122,13 +122,94 @@ def plot_transient(
         V_out = result.get_voltage(node)
         ax.plot(time, V_out, lw=2, label=f"Node {node}")
 
+    # --- NEW: Add the vertical marker for Yield Analysis Evaluation ---
+    if mark_step is not None:
+        eval_time = time[mark_step]
+        ax.axvline(eval_time, color='black', linestyle=':', lw=2, 
+                   label=f"Yield Eval ({eval_time:.2e} s)")
+
     ax.set_ylabel("Voltage (V)")
     ax.set_xlabel("Time (s)")
     ax.set_title("Transient Response")
     ax.grid(True, ls="--", alpha=0.6)
-    ax.legend(loc="best")
+    
+    # Put legend outside if it gets crowded, or keep best
+    ax.legend(loc="best", fontsize=9)
 
     fig.tight_layout()
+    fig.savefig(f"{folder}/{name}.png", dpi=600)
+    plt.close(fig)
+
+def plot_transient_sensitivity_corrected_units(
+    circuit,           # <-- NEW: Required to extract nominal physical values
+    result,
+    output_node,
+    target_component,
+    folder="./figures/tran",
+    name="tran_sensitivity",
+    mark_step=None,
+    delta_pct=0.05     # <-- NEW: Default 5% perturbation
+):
+    """Plots Transient Voltage alongside Normalized Transient Sensitivities (Voltage Shift)."""
+    if isinstance(output_node, (list, tuple)):
+        output_node = output_node[0]
+        
+    if isinstance(target_component, str):
+        target_components = [target_component]
+    else:
+        target_components = target_component
+
+    print(f"Plotting normalized transient sensitivity for V({output_node}) w.r.t {target_components}...")
+
+    time = result.sweep_axis
+    V_out = result.get_voltage(output_node)
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+
+    # Top Plot: Primal Voltage
+    ax1.plot(time, V_out, lw=2, color="blue", label=f"Nominal V({output_node})")
+    ax1.set_ylabel("Voltage (V)")
+    ax1.set_title(f"Transient Sensitivities: Node {output_node}")
+    ax1.grid(True, ls="--", alpha=0.6)
+
+    # Bottom Plot: NORMALIZED Sensitivities
+    for param in target_components:
+        raw_sens = result.get_sensitivity(output_node, param)
+        
+        # 1. Extract the base component name (e.g., 'M1' from 'M1_W')
+        comp_name = param.split("_")[0]
+        comp = next((c for c in circuit.components if c.name == comp_name), None)
+        
+        if comp is not None:
+            # 2. Extract nominal value and calculate physical delta
+            p_nom = comp.get_nominal_value(param)
+            delta_p = p_nom * delta_pct
+            
+            # 3. Normalize: (dV / dp) * delta_p = Voltage Shift (V)
+            norm_sens = raw_sens * delta_p
+            label = f"ΔV for {delta_pct*100}% Δ{param}"
+        else:
+            # Fallback if component lookup fails
+            norm_sens = raw_sens
+            label = f"d(V)/d({param}) [Raw]"
+
+        ax2.plot(time, norm_sens, lw=2, label=label)
+
+    # Now the Y-axis is pure Volts!
+    ax2.set_ylabel(f"Voltage Shift (V)")
+    ax2.set_xlabel("Time (s)")
+    ax2.grid(True, ls="--", alpha=0.6)
+    
+    if mark_step is not None:
+        eval_time = time[mark_step]
+        ax1.axvline(eval_time, color='black', linestyle=':', lw=2, label=f"Max Sens ({eval_time:.2e} s)")
+        ax2.axvline(eval_time, color='black', linestyle=':', lw=2)
+
+    ax1.legend(loc="best", fontsize=9)
+    ax2.legend(loc="best", fontsize=8, ncol=min(3, len(target_components)))
+
+    fig.tight_layout()
+    os.makedirs(folder, exist_ok=True)
     fig.savefig(f"{folder}/{name}.png", dpi=600)
     plt.close(fig)
 
@@ -153,7 +234,6 @@ def plot_transient_sensitivity(
     sens_array = result.get_sensitivity(output_node, target_component)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 5), sharex=True)
-
     ax1.plot(time, V_out, lw=2, color="blue")
     ax1.set_ylabel("Voltage (V)")
     ax1.set_title(f"Transient Sensitivity: Node {output_node} w.r.t {target_component}")
@@ -167,7 +247,6 @@ def plot_transient_sensitivity(
     fig.tight_layout()
     fig.savefig(f"{folder}/{name}.png", dpi=600)
     plt.close(fig)
-
 
 def plot_transient_sensitivity_to_radiation(
     result,
@@ -720,3 +799,85 @@ def plot_worst_case_corners(lc_data, target_node, spec_min, spec_max, tolerance_
     plt.tight_layout()
     fig.savefig(os.path.join(folder, f"{name}.png"), dpi=600)
     plt.close()
+
+def plot_combined_yield_pdf(
+    mean_out, 
+    sigma_out, 
+    lc_results,      # The Woodbury Large Change results
+    alpha_sweep,     # The array of alphas used in Woodbury (e.g., -0.2 to 0.2)
+    target_node, 
+    spec_min, 
+    spec_max, 
+    factory_tolerance, 
+    folder="../figures/yield", 
+    name="combined_yield",
+    step_idx=-1
+):
+    """
+    Plots the Analytical Probability Density Function (PDF) overlaid with 
+    the true non-linear Woodbury worst-case corners.
+    """
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # ==========================================
+    # 1. Plot the Analytical Bell Curve
+    # ==========================================
+    # Generate X values spanning +/- 4 sigma around the mean
+    x_axis = np.linspace(mean_out - 4*sigma_out, mean_out + 4*sigma_out, 1000)
+    pdf = norm.pdf(x_axis, loc=mean_out, scale=sigma_out)
+
+    ax.plot(x_axis, pdf, color='blue', linewidth=2, label="Analytical PDF (Linear Assumption)")
+    
+    # Shade the "Passing" region under the bell curve
+    fill_x = x_axis[(x_axis >= spec_min) & (x_axis <= spec_max)]
+    fill_y = norm.pdf(fill_x, loc=mean_out, scale=sigma_out)
+    ax.fill_between(fill_x, fill_y, color='green', alpha=0.2, label="Passing Yield Zone")
+    
+    # Shade the "Failing" tails in red
+    fail_left_x = x_axis[x_axis < spec_min]
+    ax.fill_between(fail_left_x, norm.pdf(fail_left_x, loc=mean_out, scale=sigma_out), color='red', alpha=0.3)
+    fail_right_x = x_axis[x_axis > spec_max]
+    ax.fill_between(fail_right_x, norm.pdf(fail_right_x, loc=mean_out, scale=sigma_out), color='red', alpha=0.3)
+
+    # ==========================================
+    # 2. Extract & Plot the True Woodbury Corners
+    # ==========================================
+    # Find the indices in the alpha array that closest match the factory tolerance (+/-)
+    idx_slow = np.argmin(np.abs(alpha_sweep - factory_tolerance))
+    idx_fast = np.argmin(np.abs(alpha_sweep + factory_tolerance))
+    
+    # Extract the exact Woodbury voltages using the elegant LargeChangeData API!
+    # No need to touch node_maps or matrix indices manually.
+    v_woodbury_slow = lc_results(target_node, alpha_idx=idx_slow, step_idx=step_idx)
+    v_woodbury_fast = lc_results(target_node, alpha_idx=idx_fast, step_idx=step_idx)
+    
+    # For AC analysis, ensure we plot the absolute magnitude of the complex phasor
+    v_woodbury_slow = np.abs(v_woodbury_slow)
+    v_woodbury_fast = np.abs(v_woodbury_fast)
+
+    # Plot Woodbury truth points as vertical dashed lines on the PDF
+    ax.axvline(v_woodbury_slow, color='purple', linestyle='--', linewidth=2, 
+               label=f"Woodbury Exact (+{factory_tolerance*100}%)")
+    ax.axvline(v_woodbury_fast, color='orange', linestyle='--', linewidth=2, 
+               label=f"Woodbury Exact (-{factory_tolerance*100}%)")
+
+    # ==========================================
+    # 3. Aesthetics & Specifications
+    # ==========================================
+    ax.axvline(spec_min, color='darkred', linestyle='-', linewidth=2, label="Spec Min")
+    ax.axvline(spec_max, color='darkred', linestyle='-', linewidth=2, label="Spec Max")
+    ax.axvline(mean_out, color='black', linestyle=':', linewidth=1.5, label="Nominal Mean")
+
+    ax.set_title(f"Statistical Reality Check: V({target_node})", fontsize=14, fontweight='bold')
+    ax.set_xlabel("Output Voltage [V]", fontsize=12)
+    ax.set_ylabel("Probability Density", fontsize=12)
+    ax.legend(loc='upper right', framealpha=0.9)
+    ax.grid(True, linestyle='--', alpha=0.6)
+
+    import os
+    os.makedirs(folder, exist_ok=True)
+    filepath = f"{folder}/{name}.png"
+    plt.tight_layout()
+    plt.savefig(filepath, dpi=300)
+    plt.close()
+    print(f"Combined PDF plot saved to {filepath}")

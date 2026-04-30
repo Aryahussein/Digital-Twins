@@ -28,6 +28,23 @@ class TransientEngine:
         self.circuit = circuit
         self.is_nonlinear = is_nonlinear
 
+    # def _solve_single_step(self, t, dt, v_prev, method='TR', nonlinear_solver=None):
+    #     """Evaluates the circuit equations for a single discrete time step."""
+    #     
+    #     if self.is_nonlinear:
+    #         # Delegate to the nonlinear solver, which will ask Circuit.build_system() 
+    #         # to assemble the matrix during its iterations.
+    #         return nonlinear_solver.solve(
+    #             t=t, dt=dt, v_prev=v_prev, v_ini=v_prev, domain="time"
+    #         )
+    #
+    #     # For linear circuits, we just ask the Circuit to build the matrix once
+    #     Y_step_lil, sources_step = self.circuit.build_system(
+    #         t=t, dt=dt, v_prev=v_prev, v_k=v_prev, domain="time", method=method
+    #     )
+    #     
+    #     return solve_linear_circuit(Y_step_lil.tocsc(), sources_step)
+    
     def _solve_single_step(self, Y_base_lil, t, dt, v_prev, method = 'TR',nonlinear_solver=None):
         """Evaluates the circuit equations for a single discrete time step.
 
