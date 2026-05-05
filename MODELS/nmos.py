@@ -78,8 +78,8 @@ class NMOS(Component):
         si = node_index[self.s] if self.s != "0" else None
         gi = node_index[self.g] if self.g != "0" else None
 
-        # ── DC stamping ─────────────────────────
-        if analysis == "dc":
+        # ── DC and TRAN stamping (Newton-linearised) ─────────────────────────
+        if analysis in ("dc", "tran"):
 
             Ieq = Id - gm * Vgs - gds * Vds
 
@@ -96,6 +96,46 @@ class NMOS(Component):
                 G[di, gi] += gm
             if gi is not None and si is not None:
                 G[si, gi] -= gm
+
+            # ── Capacitor companion models (tran only) ────────────────────
+            # Backward Euler: C stamps as conductance G=C/dt with history current
+            # I_hist = (C/dt) * V_prev
+            if analysis == "tran":
+                dt     = ctx["dt"]
+                x_prev = ctx["x_prev"]
+
+                def v_prev(n):
+                    return x_prev[node_index[n]] if n != "0" else 0.0
+
+                # Cgs companion: between g and s
+                Ggs = self.Cgs / dt
+                Vgs_prev = v_prev(self.g) - v_prev(self.s)
+                Igs_hist = Ggs * Vgs_prev
+
+                if gi is not None:
+                    G[gi, gi] += Ggs
+                    b[gi]     += Igs_hist
+                if si is not None:
+                    G[si, si] += Ggs
+                    b[si]     -= Igs_hist
+                if gi is not None and si is not None:
+                    G[gi, si] -= Ggs
+                    G[si, gi] -= Ggs
+
+                # Cgd companion: between g and d
+                Ggd = self.Cgd / dt
+                Vgd_prev = v_prev(self.g) - v_prev(self.d)
+                Igd_hist = Ggd * Vgd_prev
+
+                if gi is not None:
+                    G[gi, gi] += Ggd
+                    b[gi]     += Igd_hist
+                if di is not None:
+                    G[di, di] += Ggd
+                    b[di]     -= Igd_hist
+                if gi is not None and di is not None:
+                    G[gi, di] -= Ggd
+                    G[di, gi] -= Ggd
 
         # ── AC stamping ─────────────────────────
         elif analysis == "ac":

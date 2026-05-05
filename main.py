@@ -354,7 +354,7 @@ def build_circuit(netlist_file):
 
 if __name__ == "__main__":
 
-    NETLIST_FILE = sys.argv[1] if len(sys.argv) >= 2 else "NETLISTS/diff_amp_ac.sp"
+    NETLIST_FILE = sys.argv[1] if len(sys.argv) >= 2 else "NETLISTS/mos_amp_tran.sp"
 
     analysis = detect_analysis(NETLIST_FILE)
 

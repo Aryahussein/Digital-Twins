@@ -5,8 +5,8 @@ Vdd 3 0 1.2
 
 * Inputs
 * True differential inputs centred on Vcm = 0.55V
-Vinp 1 0 SINE(0.44 0.01 1g 0)
-Vinn 6 0 SINE(0.44 0.01 1g 180)
+Vinp 1 0 SINE(0.44 0.001 1k 0)
+Vinn 6 0 SINE(0.44 0.001 1k 180)
 
 *Vinp 1 0 DC 0.44 AC 0.5
 *Vinn 6 0 DC 0.44 AC 0.5 180

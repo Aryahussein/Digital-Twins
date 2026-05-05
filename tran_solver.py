@@ -8,9 +8,14 @@ _COLORS = ['#1f77b4', '#d62728', '#2ca02c', '#ff7f0e',
 
 
 def run_tran(components, node_index, N, Mv, Mo,
-             dt, tstop,
-             sens_node=None,
-             print_requests=None):
+             tran_params,
+             print_requests=None,
+             sens_node=None):
+    """
+    tran_params : dict with keys 'tstep' and 'tstop'
+    """
+    dt    = tran_params['tstep']
+    tstop = tran_params['tstop']
 
     if dt <= 0:
         raise RuntimeError("Transient timestep must be > 0")
@@ -35,6 +40,7 @@ def run_tran(components, node_index, N, Mv, Mo,
         t = step * dt
         x = x_prev.copy()
 
+        x_new = x.copy()   # safe initialisation before the Newton loop
         for _ in range(100):
 
             G = np.zeros((size, size))
@@ -60,6 +66,7 @@ def run_tran(components, node_index, N, Mv, Mo,
             x_new = np.linalg.solve(G, b)
 
             if np.max(np.abs(x_new - x)) < 1e-6:
+                x = x_new
                 break
 
             x = x_new
