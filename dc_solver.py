@@ -1,7 +1,7 @@
 import numpy as np
 
 GMIN     = 1e-12
-MAX_ITER = 150
+MAX_ITER = 1500
 TOL      = 1e-6
 
 

@@ -13,13 +13,7 @@ TOL      = 1e-6
 
 def _newton_dc(components, node_index, N, Mv, Mo,
                x_init, sweep_overrides):
-    """
-    Self-contained Newton solve for one DC sweep point.
-    Does NOT do source stepping — the warm-start x_init should already
-    be close enough that stepping isn't needed between adjacent sweep points.
 
-    sweep_overrides: dict {src_name_lower: float}
-    """
     size = N + Mv + Mo
     x    = x_init.copy()
 
@@ -58,15 +52,15 @@ def _newton_dc(components, node_index, N, Mv, Mo,
         alpha = 1.0
         if np.max(np.abs((x + (x_new - x))[:N])) > 50.0:
             alpha = 0.5
+
         x = x + alpha * (x_new - x)
 
     raise RuntimeError(
-        f"DC sweep Newton failed at {sweep_overrides}  (last err={err:.2e})"
+        f"DC sweep Newton failed at {sweep_overrides} (last err={err:.2e})"
     )
 
 
 def _branch_current(components, node_index, N, x, source_name):
-    """Return MNA branch current variable for a named voltage source."""
     from MODELS.voltage_source import VoltageSource
     for comp in components:
         if isinstance(comp, VoltageSource) and comp.name.lower() == source_name.lower():
@@ -74,75 +68,75 @@ def _branch_current(components, node_index, N, x, source_name):
     raise KeyError(f"Voltage source '{source_name}' not found in netlist")
 
 
+# ---------- NEW: unified sweep builder ----------
+def _build_sweep(start, stop, step, name):
+    if step == 0:
+        raise RuntimeError(f".dc step cannot be zero for source {name}")
+
+    return np.arange(start, stop + step * 0.5, step)
+
+
 def run_dc_sweep(components, node_index, N, Mv, Mo,
                  sweep_params, print_requests):
-    """
-    DC sweep engine.
 
-    sweep_params  — list of dicts parsed from .dc lines:
-      {
-        'src'  : 'Vgs',       # source to sweep
-        'start': 0.0,
-        'stop' : 1.2,
-        'step' : 0.01,
-        'inner': {            # optional family-of-curves
-            'src'   : 'Vds',
-            'values': [0.2, 0.6, 1.0, 1.2]
-        }
-      }
-
-    print_requests — list of (req_type, node_list):
-      'v' + [node_name]   → plot node voltage vs sweep variable
-      'i' + [src_name]    → plot |branch current| through that voltage source (µA)
-    """
     from dc_solver import run_dc
 
-    # Warm-start: solve DC at the netlist's nominal source values
     print("Computing warm-start DC operating point...")
     x_op = run_dc(components, node_index, N, Mv, Mo,
                   sens_node=None, print_requests=None)
 
     for sp in sweep_params:
 
+        # ---------- outer sweep ----------
         src_outer  = sp['src']
         v_start    = sp['start']
         v_stop     = sp['stop']
         v_step     = sp['step']
-        inner      = sp.get('inner', None)
 
-        # Build outer sweep vector (handle negative step)
-        if v_step == 0:
-            raise RuntimeError(f".dc step cannot be zero for source {src_outer}")
-        if v_step < 0:
-            sweep_vals = np.arange(v_start, v_stop + v_step * 0.5, v_step)
-        else:
-            sweep_vals = np.arange(v_start, v_stop + v_step * 0.5, v_step)
+        sweep_vals = _build_sweep(v_start, v_stop, v_step, src_outer)
 
-        # Inner (family of curves) or single curve
+        # ---------- inner sweep (robust handling) ----------
+        inner = sp.get('inner', None)
+
+        inner_src    = None
+        inner_values = [None]
+
         if inner:
-            inner_values = inner['values']
-            inner_src    = inner['src']
-        else:
-            inner_values = [None]
-            inner_src    = None
+            inner_src = inner.get('src')
 
-        # One figure per .dc block
+            # Case 1: explicit values
+            if 'values' in inner:
+                inner_values = inner['values']
+
+            # Case 2: generate from range
+            elif all(k in inner for k in ['start', 'stop', 'step']):
+                inner_values = _build_sweep(inner['start'],
+                                            inner['stop'],
+                                            inner['step'],
+                                            inner_src)
+
+            else:
+                raise RuntimeError(
+                    f"Invalid inner sweep format for source {inner_src}"
+                )
+
+        # ---------- plotting setup ----------
         n_plots = max(len(print_requests), 1)
         fig, axes = plt.subplots(n_plots, 1,
                                  figsize=(9, 3.5 * n_plots),
                                  squeeze=False)
         axes = axes.flatten()
 
+        # ---------- curves ----------
         for curve_idx, inner_val in enumerate(inner_values):
 
             color = _COLORS[curve_idx % len(_COLORS)]
             label = (f"{inner_src}={inner_val:.3g}V"
                      if inner_val is not None else src_outer)
 
-            # Per-print_request storage
             curve_data = [[] for _ in print_requests] if print_requests else []
 
-            x = x_op.copy()   # warm-start; tracks across the sweep
+            x = x_op.copy()   # safe warm-start for each curve
 
             for v_outer in sweep_vals:
 
@@ -161,10 +155,12 @@ def run_dc_sweep(components, node_index, N, Mv, Mo,
 
                 if print_requests:
                     for pi, (req_type, node_list) in enumerate(print_requests):
+
                         if req_type.lower() == 'v':
                             vals = [x[node_index[nd]]
                                     for nd in node_list if nd in node_index]
                             curve_data[pi].append(np.mean(vals) if vals else np.nan)
+
                         elif req_type.lower() == 'i':
                             try:
                                 I = _branch_current(components, node_index,
@@ -172,10 +168,11 @@ def run_dc_sweep(components, node_index, N, Mv, Mo,
                                 curve_data[pi].append(abs(I))
                             except KeyError:
                                 curve_data[pi].append(np.nan)
+
                         else:
                             curve_data[pi].append(np.nan)
 
-            # Plot
+            # ---------- plotting ----------
             if print_requests:
                 for pi, (req_type, node_list) in enumerate(print_requests):
                     ax = axes[pi]
@@ -193,7 +190,7 @@ def run_dc_sweep(components, node_index, N, Mv, Mo,
                     ax.set_ylabel(ylabel)
                     ax.grid(True, alpha=0.35)
 
-        # Finalise axes
+        # ---------- final formatting ----------
         for ax in axes:
             ax.set_xlabel(f"{src_outer} (V)")
             if len(inner_values) > 1:
@@ -203,7 +200,9 @@ def run_dc_sweep(components, node_index, N, Mv, Mo,
         title = f"DC Sweep — {src_outer}"
         if inner_src:
             title += f"  (family: {inner_src})"
+
         fig.suptitle(title, fontsize=11)
         plt.tight_layout()
 
     plt.show()
+

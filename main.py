@@ -53,23 +53,14 @@ def generate_ac_frequencies(ac_sweep):
 
 
 def _is_dc_sweep_line(line):
-    """
-    Return True if a .dc line is a parameter sweep, False if it is a
-    DC operating-point request (.dc op  or  .dc with no source name).
-
-    SPICE .dc sweep syntax:  .dc  SrcName  start  stop  step
-    SPICE .dc op   syntax :  .dc  op          (alias for .op)
-    """
     t = line.split()
-    # t[0] == '.dc'
     if len(t) < 2:
-        return False                       # bare .dc → treat as .op
+        return False
     second = t[1].lower()
     if second == 'op':
-        return False                       # .dc op → operating point
+        return False
     if len(t) < 5:
-        return False                       # not enough tokens for a sweep
-    # Try to parse t[2..4] as numbers; if they fail it's not a sweep
+        return False
     try:
         float(t[2]); float(t[3]); float(t[4])
     except ValueError:
@@ -110,6 +101,7 @@ def build_circuit(netlist_file):
     tran_params    = None
     sens_node      = None
     print_requests = []
+    diff_gain_req  = None
 
     with open(netlist_file) as f:
         for raw in f:
@@ -120,7 +112,6 @@ def build_circuit(netlist_file):
             t    = line.split()
             name = t[0].lower()
 
-            # ── Passives ──────────────────────────────────────────────
             if name.startswith('r'):
                 _, n1, n2, val = t
                 components.append(Resistor(t[0], n1, n2, parse_value(val)))
@@ -141,112 +132,220 @@ def build_circuit(netlist_file):
                 components.append(CurrentSource(t[0], n1, n2, parse_value(val)))
                 nodes.update([n1, n2])
 
-            # ── Voltage sources ───────────────────────────────────────
             elif name.startswith('v'):
                 n1, n2 = t[1], t[2]
-                match  = re.search(r'(\w+)\((.*?)\)', line)
+
+                # Tokens after the two node names
+                rest = t[3:]  # e.g. ['DC','0.44','AC','0.5','180']
+                               #   or ['AC','0.5','180']
+                               #   or ['SINE(0.55','0.01','1g','0)','AC','0.5']
+                               #   or ['1.2']
+
+                # ── Defaults ──────────────────────────────────────────
+                src_type = 'DC'
+                params   = [0.0]
+                ac_mag   = None
+                ac_phase = 0.0
+
+                # ── Functional waveform: SINE(...) PULSE(...) etc. ────
+                match = re.search(r'(\w+)\((.*?)\)', line)
                 if match:
                     src_type = match.group(1).upper()
                     params   = [parse_value(x) for x in match.group(2).split()]
+                    # AC spec may still follow the closing paren, e.g.
+                    #   SINE(0.55 0.01 1g 0) AC 0.5
+                    ac_idx = next((i for i, tok in enumerate(rest)
+                                   if tok.lower() == 'ac'), None)
+                    if ac_idx is not None and ac_idx + 1 < len(rest):
+                        ac_mag   = parse_value(rest[ac_idx + 1])
+                        ac_phase = parse_value(rest[ac_idx + 2]) \
+                                   if ac_idx + 2 < len(rest) else 0.0
+
                 else:
-                    src_type = 'DC'
-                    params   = [parse_value(t[3])]
-                voltages.append((t[0], n1, n2, src_type, params))
+                    # Scan 'rest' for DC and AC keywords in any order
+                    i = 0
+                    while i < len(rest):
+                        tok = rest[i].lower()
+
+                        if tok == 'dc':
+                            # DC <value>
+                            if i + 1 < len(rest):
+                                src_type = 'DC'
+                                params   = [parse_value(rest[i + 1])]
+                                i += 2
+                            else:
+                                i += 1
+
+                        elif tok == 'ac':
+                            # AC <mag> [phase]
+                            if i + 1 < len(rest):
+                                ac_mag = parse_value(rest[i + 1])
+                                i += 2
+                                if i < len(rest):
+                                    try:
+                                        ac_phase = parse_value(rest[i])
+                                        i += 1
+                                    except ValueError:
+                                        pass  # next token is not a number
+                            else:
+                                i += 1
+
+                        else:
+                            # Bare value with no keyword → treat as DC
+                            try:
+                                src_type = 'DC'
+                                params   = [parse_value(rest[i])]
+                            except ValueError:
+                                pass
+                            i += 1
+
+                    # Pure AC source (no DC keyword seen, but AC was found)
+                    if src_type == 'DC' and params == [0.0] and ac_mag is not None:
+                        src_type = 'AC'
+                        params   = [ac_mag, ac_phase]
+                        ac_mag   = None   # VoltageSource.__init__ reads from params
+
+                voltages.append((t[0], n1, n2, src_type, params, ac_mag, ac_phase))
                 nodes.update([n1, n2])
 
-            # ── Op-amp ────────────────────────────────────────────────
             elif name.startswith('o'):
                 opamps.append(t)
                 nodes.update([t[1], t[2], t[3]])
 
-            # ── Diode ─────────────────────────────────────────────────
             elif name.startswith('d'):
                 _, n1, n2 = t[:3]
                 components.append(Diode(t[0], n1, n2))
                 nodes.update([n1, n2])
 
-            # ── MOSFETs ───────────────────────────────────────────────
             elif name.startswith('m'):
-                _, d, g, s, b, mos_type = t[:6]
+
+                name_tok, d, g, s, b, mos_type = t[:6]
+
+                params = {"W": 1e-6, "L": 1e-6}
+
+                for tok in t[6:]:
+                    if '=' in tok:
+                        k, v = tok.split('=')
+                        params[k.upper()] = parse_value(v)
+
                 mos_lo = mos_type.lower()
+
                 if mos_lo == 'nmos':
                     from MODELS.nmos import NMOS
-                    components.append(NMOS(t[0], d, g, s, b))
+                    components.append(NMOS(name_tok, d, g, s, b,
+                                           W=params["W"], L=params["L"]))
                 elif mos_lo == 'pmos':
                     from MODELS.pmos import PMOS
-                    components.append(PMOS(t[0], d, g, s, b))
+                    components.append(PMOS(name_tok, d, g, s, b,
+                                           W=params["W"], L=params["L"]))
                 else:
                     raise RuntimeError(f"Unknown MOSFET type: {mos_type}")
-                nodes.update([d, g, s, b])
 
-            # ── Analysis directives ───────────────────────────────────
-            elif name == '.tran':
-                _, dt, tstop = t
-                tran_params = (parse_value(dt), parse_value(tstop))
+                nodes.update([d, g, s, b])
 
             elif name == '.ac':
                 _, sweep_type, npts, fstart, fstop = t
                 ac_sweep = (sweep_type.lower(), int(npts),
                             parse_value(fstart), parse_value(fstop))
 
+            elif name == '.tran':
+                # Example:
+                # .tran 1n 1u
+                # .tran tstep tstop
+
+                if len(t) < 3:
+                    raise RuntimeError("Invalid .tran syntax")
+
+                tstep = parse_value(t[1])
+                tstop = parse_value(t[2])
+
+                tran_params = {
+                    'tstep': tstep,
+                    'tstop': tstop
+                }
+
             elif name == '.dc':
-                if _is_dc_sweep_line(line.lower()):
-                    # .dc SrcName start stop step [InnerSrc start stop step]
-                    sp = {
-                        'src':   t[1],
-                        'start': parse_value(t[2]),
-                        'stop':  parse_value(t[3]),
-                        'step':  parse_value(t[4]),
+                # Base format:
+                # .dc Vd 0 1.2 0.01
+                # Extended:
+                # .dc Vd 0 1.2 0.01 SWEEP Vg 0.2 1.0 0.2
+
+                if len(t) < 5:
+                    raise RuntimeError("Invalid .dc syntax")
+
+                src   = t[1]
+                start = parse_value(t[2])
+                stop  = parse_value(t[3])
+                step  = parse_value(t[4])
+
+                sweep_dict = {
+                    'src': src,
+                    'start': start,
+                    'stop': stop,
+                    'step': step
+                }
+
+                # Check for nested sweep
+                if len(t) > 5:
+                    if t[5].lower() != 'sweep':
+                        raise RuntimeError("Expected 'SWEEP' keyword in extended .dc")
+
+                    if len(t) < 10:
+                        raise RuntimeError("Invalid nested .dc syntax")
+
+                    inner_src   = t[6]
+                    inner_start = parse_value(t[7])
+                    inner_stop  = parse_value(t[8])
+                    inner_step  = parse_value(t[9])
+
+                    # Build inner sweep values
+                    if inner_step == 0:
+                        raise RuntimeError("Inner .dc step cannot be zero")
+
+                    if inner_step > 0:
+                        values = np.arange(inner_start, inner_stop + inner_step*0.5, inner_step)
+                    else:
+                        values = np.arange(inner_start, inner_stop + inner_step*0.5, inner_step)
+
+                    sweep_dict['inner'] = {
+                        'src': inner_src,
+                        'values': values
                     }
-                    if len(t) >= 9:
-                        i_start = parse_value(t[6])
-                        i_stop  = parse_value(t[7])
-                        i_step  = parse_value(t[8])
-                        i_vals  = list(np.arange(i_start,
-                                                  i_stop + i_step * 0.5,
-                                                  i_step))
-                        sp['inner'] = {'src': t[5], 'values': i_vals}
-                    dc_sweeps.append(sp)
-                # else: .dc op → just a DC operating-point request, no sweep params needed
 
-            elif name == '.op':
-                pass   # DC operating point — no extra params
-
-            elif name == '.sens':
-                sens_node = t[1].lower()[2:-1]
+                dc_sweeps.append(sweep_dict)
 
             elif name == '.print':
-                # .print v 2          → node voltage
-                # .print v 1 2        → overlaid voltages on one subplot
-                # .print i Vds        → branch current through named source
                 print_requests.append((t[1], t[2:]))
+
+            elif name == '.diffgain':
+                diff_gain_req = {
+                    "in_pos":  t[1],
+                    "in_neg":  t[2],
+                    "out_pos": t[3],
+                    "out_neg": t[4],
+                }
 
             elif name == '.end':
                 break
 
-    # ── Node indexing ─────────────────────────────────────────────────
     nodes.discard('0')
     nodes      = sorted(nodes)
     node_index = {n: i for i, n in enumerate(nodes)}
     N          = len(nodes)
 
-    # ── Voltage sources ───────────────────────────────────────────────
-    for k, (vname, n1, n2, stype, params) in enumerate(voltages):
-        components.append(VoltageSource(vname, n1, n2, stype, params, k))
+    for k, entry in enumerate(voltages):
+        vname, n1, n2, stype, params = entry[:5]
+        ac_mag   = entry[5] if len(entry) > 5 else None
+        ac_phase = entry[6] if len(entry) > 6 else 0.0
+        components.append(VoltageSource(vname, n1, n2, stype, params, k,
+                                        ac_mag=ac_mag, ac_phase=ac_phase))
     Mv = len(voltages)
 
-    # ── Op-amps ───────────────────────────────────────────────────────
-    for k, ot in enumerate(opamps):
-        _, nplus, nminus, nout, gain = ot
-        components.append(OpAmp(ot[0], nplus, nminus, nout,
-                                parse_value(gain), k))
     Mo = len(opamps)
 
-    print(f"  Parsed: N={N} nodes, Mv={Mv} V-sources, Mo={Mo} op-amps, "
-          f"{len(components)} total components")
-
     return (components, node_index, N, Mv, Mo,
-            ac_sweep, tran_params, sens_node, print_requests, dc_sweeps)
+            ac_sweep, tran_params, sens_node,
+            print_requests, dc_sweeps, diff_gain_req)
 
 
 # ==========================================================
@@ -255,48 +354,31 @@ def build_circuit(netlist_file):
 
 if __name__ == "__main__":
 
-    if len(sys.argv) >= 2:
-        NETLIST_FILE = sys.argv[1]
-    else:
-        NETLIST_FILE = "test_circuit.sp"
-        print("Usage: python main.py <netlist.sp>")
-        print(f"No netlist specified — using default: {NETLIST_FILE}\n")
-
-    print("=== RUN START ===")
-    print(f"Netlist : {NETLIST_FILE}")
+    NETLIST_FILE = sys.argv[1] if len(sys.argv) >= 2 else "NETLISTS/diff_amp_ac.sp"
 
     analysis = detect_analysis(NETLIST_FILE)
-    print(f"Analysis: {analysis}")
 
     (components, node_index, N, Mv, Mo,
      ac_sweep, tran_params, sens_node,
-     print_requests, dc_sweeps) = build_circuit(NETLIST_FILE)
+     print_requests, dc_sweeps, diff_gain_req) = build_circuit(NETLIST_FILE)
 
-    if analysis == 'dc':
-        run_dc(components, node_index, N, Mv, Mo, sens_node, print_requests)
-
-    elif analysis == 'dc_sweep':
-        if not dc_sweeps:
-            raise RuntimeError(
-                "Analysis detected as dc_sweep but no valid .dc sweep line found.\n"
-                "Sweep syntax: .dc SrcName start stop step\n"
-                "Op-point syntax: .dc op  OR  .op"
-            )
-        run_dc_sweep(components, node_index, N, Mv, Mo,
-                     dc_sweeps, print_requests)
-
-    elif analysis == 'ac':
-        if ac_sweep is None:
-            raise RuntimeError("No .ac directive found")
+    if analysis == 'ac':
         freqs = generate_ac_frequencies(ac_sweep)
-        x_op  = run_dc(components, node_index, N, Mv, Mo,
-                       sens_node=None, print_requests=None)
-        run_ac(components, node_index, N, Mv, Mo,
-               freqs, sens_node, print_requests, x_op=x_op)
+        x_op  = run_dc(components, node_index, N, Mv, Mo)
 
+        run_ac(components, node_index, N, Mv, Mo,
+               freqs, sens_node, print_requests,
+               x_op=x_op,
+               diff_gain_request=diff_gain_req)
+        
+    elif analysis == 'dc_sweep':
+        run_dc_sweep(components, node_index, N, Mv, Mo,
+                    dc_sweeps, print_requests)
+        
     elif analysis == 'tran':
         if tran_params is None:
-            raise RuntimeError("No .tran directive found")
-        dt, tstop = tran_params
+            raise RuntimeError(".tran specified but no parameters parsed")
+
         run_tran(components, node_index, N, Mv, Mo,
-                 dt, tstop, sens_node, print_requests)
+                tran_params,
+                print_requests)
