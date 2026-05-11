@@ -107,5 +107,7 @@ class TransientEngine:
             
             if keep_lus: 
                 list_of_lus.append(lu)
+
+        # print(list_of_lus)
                 
         return time_array, results, list_of_lus

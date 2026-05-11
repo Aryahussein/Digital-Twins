@@ -116,7 +116,7 @@ class LargeChangeEngine:
                 number of sweep variations. Each row contains the exact physical 
                 shift (Delta P) for each parameter.
             variation_axis (numpy.ndarray): The 1D labels for the V variations 
-                (e.g., an alpha array, or Monte Carlo run indices) for plotting.
+                (e.g., an alpha array, run indices) for plotting.
             method (str, optional): The numerical integration method ("TR" or "BE"). 
                 Defaults to "TR".
                 
@@ -126,8 +126,10 @@ class LargeChangeEngine:
         num_variations = dp_matrix.shape[0]
         lc_data = LargeChangeData(variation_axis, result.sweep_axis, result.node_map)
         
-        domain = getattr(result, 'domain', 'time')
-        dt = getattr(result, 'dt', 0.0)
+        domain = getattr(result, 'domain')
+        dt = getattr(result, 'step')
+
+        print(dt)
 
         # 1. Cache pristine parameters safely
         original_values = {

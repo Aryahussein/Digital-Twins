@@ -84,10 +84,12 @@ class Simulator:
         # 1. RUN THE FORWARD MATH ENGINES
         # =====================================================================
         
+        step = 0.0
         if ".TRAN" in self.analyses:
             analysis_type, domain = ".TRAN", "time"
             t_stop = self.analyses[".TRAN"]["stop"]
             dt = self.analyses[".TRAN"]["step"]
+            step = dt
             method = self.analyses.get("OPTIONS", {}).get("method", method)
             
             initial_conditions = None
@@ -109,6 +111,7 @@ class Simulator:
             stop = self.analyses[".AC"]["stop"]
             pts = self.analyses[".AC"]["num_points"]
             sweep_type = self.analyses[".AC"].get("sweep_type", "DEC")
+            step = 1.0 / pts
 
             ac_engine = ACEngine(self.circuit)
             sweep_axis, VI, lus = ac_engine.compute(
@@ -160,12 +163,14 @@ class Simulator:
             analysis_type=analysis_type, 
             sweep_axis=sweep_axis, 
             VI_matrix=VI, 
-            node_map=self.circuit.node_map
+            node_map=self.circuit.node_map, 
+            domain=domain, 
+            step=step, 
+            list_of_lus=lus
         )
-        # Attach additional metadata 
-        result.list_of_lus = lus
-        result.domain = domain
-        result.dt = dt
+
+        # print(lus)
+        # print(result.list_of_lus)
 
         # =====================================================================
         # 3. RUN THE ADJOINT ENGINES (Backward Passes)

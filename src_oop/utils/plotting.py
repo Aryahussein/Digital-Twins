@@ -848,8 +848,8 @@ def plot_combined_yield_pdf(
     
     # Extract the exact Woodbury voltages using the elegant LargeChangeData API!
     # No need to touch node_maps or matrix indices manually.
-    v_woodbury_slow = lc_results(target_node, alpha_idx=idx_slow, step_idx=step_idx)
-    v_woodbury_fast = lc_results(target_node, alpha_idx=idx_fast, step_idx=step_idx)
+    v_woodbury_slow = lc_results(target_node, var_idx=idx_slow, step_idx=step_idx)
+    v_woodbury_fast = lc_results(target_node, var_idx=idx_fast, step_idx=step_idx)
     
     # For AC analysis, ensure we plot the absolute magnitude of the complex phasor
     v_woodbury_slow = np.abs(v_woodbury_slow)

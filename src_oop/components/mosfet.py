@@ -60,7 +60,7 @@ class Mosfet(Component):
         if param_name.startswith(prefix):
             attr_name = param_name[len(prefix):]
             if attr_name in self._diff_attrs:
-                return getattr(self, attr_name)
+                return getattr(self, attr_name, 0.0)
                 
         return super().get_nominal_value(param_name)
 

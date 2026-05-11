@@ -213,6 +213,7 @@ if __name__ == "__main__":
     # 6. YIELD ANALYSIS (SDWC Woodbury)
     # =========================================================================
     if yield_analysis:
+        print("\n=== EXECUTING YIELD ANALYSIS ===")
         perform_sdwc_yield_analysis(
             circuit=circuit,
             result=result,
