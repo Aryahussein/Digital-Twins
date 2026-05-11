@@ -1,7 +1,7 @@
 from .base import Component
 
 class Resistor(Component):
-    """A linear resistor component."""
+    """A linear resistor component (Type 'R')."""
     
     def bind_nodes(self, node_map):
         self.idx_1 = node_map.get(self.data.get("n1", 0))
@@ -13,19 +13,27 @@ class Resistor(Component):
             return 0.0 # Prevent division by zero
         return 1.0 / r_val
 
-    def stamp_static(self, Y):
+    # ==========================================
+    # 1. STATIC STAMPING (Skeleton Matrix)
+    # ==========================================
+    def stamp_base_matrix(self, Y):
+        """Phase 1: Fixed conductances belong strictly in the Base Skeleton.
+        Run ONCE per simulation.
+        """
         g = self._get_conductance(self.value)
         i, j = self.idx_1, self.idx_2
-        if i is not None:
-            Y[i, i] += g
-            if j is not None:
-                Y[i, j] -= g
-                Y[j, i] -= g
-        if j is not None:
-            Y[j, j] += g
+        
+        if i is not None: Y[i, i] += g
+        if j is not None: Y[j, j] += g
+        if i is not None and j is not None:
+            Y[i, j] -= g
+            Y[j, i] -= g
 
+    # ==========================================
+    # 2. SENSITIVITY & WOODBURY ENGINES
+    # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
-        """Calculates Adjoint sensitivity w.r.t Resistance (R)."""
+        """Calculates exact Adjoint sensitivity w.r.t Resistance (R)."""
         v1 = VI[self.idx_1] if self.idx_1 is not None else 0.0
         v2 = VI[self.idx_2] if self.idx_2 is not None else 0.0
         p1 = PsiPhi[self.idx_1] if self.idx_1 is not None else 0.0
@@ -48,7 +56,7 @@ class Resistor(Component):
             P[j, col_idx] = -1.0
             Q[j, col_idx] = -1.0
 
-    def get_delta_y(self, param_name, dp, **kwargs):
+    def get_delta_y(self, param_name, dp, V_nom=None, V_k=None, **kwargs):
         """Transforms a physical parameter change into a scalar Admittance change.
         
         Calculates the EXACT non-linear finite difference for Large Change analysis.

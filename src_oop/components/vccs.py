@@ -10,9 +10,10 @@ class VCCS(Component):
         self.idx_4 = node_map.get(self.data.get("n4", 0)) # Control -
 
     # ==========================================
-    # SOLVER ENGINES (Stamping)
+    # 1. STATIC STAMPING (Skeleton Matrix)
     # ==========================================
-    def stamp_static(self, Y):
+    def stamp_base_matrix(self, Y):
+        """Phase 1: Stamps time/voltage-invariant transconductance into the skeleton matrix."""
         g = self.value # The transconductance
         i, j, k, l = self.idx_1, self.idx_2, self.idx_3, self.idx_4
         
@@ -26,11 +27,8 @@ class VCCS(Component):
             if k is not None: Y[j, k] -= g
             if l is not None: Y[j, l] += g
 
-    # AC and Transient inherit from static as the gain is frequency independent.
-    # The Simulator engine will automatically use stamp_static if stamp_ac/stamp_transient are not overridden.
-
     # ==========================================
-    # SENSITIVITY ENGINES (Adjoint & Woodbury)
+    # 2. SENSITIVITY & WOODBURY ENGINES
     # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """
@@ -67,7 +65,7 @@ class VCCS(Component):
         if c1 is not None: Q[c1, col_idx] = 1.0
         if c2 is not None: Q[c2, col_idx] = -1.0
 
-    def get_delta_y(self, param_name, dp, **kwargs):
+    def get_delta_y(self, param_name, dp, V_nom=None, V_k=None, **kwargs):
         """Transforms a physical parameter change into a scalar Admittance change.
         
         Because transconductance (G) is stamped directly into the Y-matrix as a 

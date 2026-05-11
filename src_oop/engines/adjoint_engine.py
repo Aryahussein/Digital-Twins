@@ -89,8 +89,8 @@ class AdjointEngine:
                 )
                 adjoint_history.append(v_hat)
                 v_hat_next = v_hat
-                print(f"J_adj for step {i}: {J_adj}")
-                print(f"v_hat for step {i}: {v_hat}")
+                # print(f"J_adj for step {i}: {J_adj}")
+                # print(f"v_hat for step {i}: {v_hat}")
             adjoint_history.reverse()
 
             # 2. FORWARD INTEGRATION PASS

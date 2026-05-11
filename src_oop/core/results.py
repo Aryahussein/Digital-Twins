@@ -131,20 +131,19 @@ class SimulationResult:
     """
 
     def __init__(self, analysis_type, sweep_axis, VI_matrix, node_map):
-        """Initializes the SimulationResult vault.
-
-        Args:
-            analysis_type (str): Type of simulation run (e.g., '.TRAN').
-            sweep_axis (np.ndarray): The x-axis array for sweeps.
-            VI_matrix (np.ndarray): The raw matrix output from the math solver.
-            node_map (dict): The circuit's node coordinate map.
-        """
-        self.type = analysis_type
+        """Initializes the SimulationResult vault."""
+        
+        self.analysis_type = analysis_type  # <-- REQUIRED for main.py!
+        self.type = analysis_type           # Keep this just in case older code uses it
+        
         self.sweep_axis = np.atleast_1d(sweep_axis)
         self.VI = VI_matrix
         self.node_map = node_map
         self.sensitivities = None
         self.global_sensitivities = None
+        self.domain = None                  # Simulator adds this later
+        self.dt = 0.0                       # Simulator adds this later
+        self.list_of_lus = None             # Simulator adds this later
 
     def get_vhats(self, node):
         adjoint_history = self.global_sensitivities.get("Raw_Adjoint_History", None)

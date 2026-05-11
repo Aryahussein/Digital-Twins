@@ -1,200 +1,192 @@
+"""Large Change Sensitivity Engine.
+
+This module provides the ultimate unified engine for performing simultaneous,
+large-scale parameter sweeps across non-linear circuits. It leverages the
+Sherman-Morrison-Woodbury matrix identity injected directly into the core
+Newton-Raphson solver to achieve exact mathematical equilibrium without
+requiring expensive O(N^1.5) LU refactorizations for every variation step.
+
+Linear and AC circuits converge in exactly 1 iteration (a pure Woodbury step).
+Non-Linear circuits cascade Woodbury updates until exact equilibrium is reached.
+"""
+
 import numpy as np
+from engines.solver import NonlinearSolver, ExplicitWoodburyStrategy
+from utils.utils import TemporaryCircuitState
 
 class LargeChangeData:
     """A highly sliceable 3D tensor for large-change sensitivity analysis.
 
-    This vault stores the absolute node voltages resulting from simultaneously 
-    scaling multiple circuit parameters. It provides a clean, callable interface 
-    to extract 1D lines or 2D surfaces for plotting without requiring the user 
-    to manage raw numpy indices.
+    This class acts as a data vault, storing the absolute node voltages
+    resulting from simultaneously scaling multiple circuit parameters. It
+    provides a clean, callable interface to extract 1D lines or 2D surfaces
+    for plotting without requiring the user to manage raw numpy indices.
 
     The underlying tensor maintains the shape:
-    (Alpha Multipliers × Sweep Steps × Total Nodes)
+    (Variations × Sweep Steps × Total Nodes)
 
     Attributes:
-        alpha_axis (np.ndarray): The 1D array of scaling multipliers applied 
-            to the sensitivity vectors.
-        sweep_axis (np.ndarray): The independent variable array from the base 
-            simulation (e.g., Time in s, Frequency in Hz).
-        node_map (dict[str or int, int]): Maps string node names to matrix 
-            column indices.
-        data (np.ndarray): The complex or real 3D tensor holding the calculated 
-            absolute voltages.
+        variation_axis (numpy.ndarray): The 1D array of variation labels
+            (e.g., scaling multipliers, run indices) applied to the data.
+        sweep_axis (numpy.ndarray): The independent variable array from the
+            base simulation (e.g., Time in seconds, Frequency in Hertz).
+        node_map (dict[str, int]): Maps string node names to matrix column indices.
+        data (numpy.ndarray): The complex or real 3D tensor holding the
+            calculated absolute voltages.
     """
-
-    def __init__(self, alpha_axis, sweep_axis, node_map):
-        """Initializes the LargeChangeData tensor.
+    
+    def __init__(self, variation_axis, sweep_axis, node_map):
+        """Initializes the LargeChangeData tensor vault.
 
         Args:
-            alpha_axis (np.ndarray or list): The scaling multipliers.
-            sweep_axis (np.ndarray or list): The forward simulation's x-axis.
+            variation_axis (numpy.ndarray or list): The variation identifiers.
+            sweep_axis (numpy.ndarray or list): The forward simulation's x-axis.
             node_map (dict): The circuit's node coordinate map.
         """
-        self.alpha_axis = np.atleast_1d(alpha_axis)
+        self.variation_axis = np.atleast_1d(variation_axis)
         self.sweep_axis = np.atleast_1d(sweep_axis)
         self.node_map = node_map
         
-        # Shape: (Alphas, Sweep_Steps, Total_Nodes)
-        self.data = np.zeros((len(self.alpha_axis), len(self.sweep_axis), len(node_map)), dtype=complex)
+        self.data = np.zeros(
+            (len(self.variation_axis), len(self.sweep_axis), len(node_map)), 
+            dtype=complex
+        )
         
-    def __call__(self, node, alpha_idx=None, step_idx=None):
+    def __call__(self, node, var_idx=None, step_idx=None):
         """Retrieves specific data slices using a flexible Pythonic call.
 
         Args:
-            node (str or int): The target output node.
-            alpha_idx (int, optional): The index of the specific parameter 
-                scaling multiplier. Defaults to None.
+            node (str or int): The target output node to extract data for.
+            var_idx (int, optional): The index of the specific variation. 
+                Defaults to None.
             step_idx (int, optional): The index of the specific simulation 
                 sweep step (time/frequency). Defaults to None.
 
         Returns:
-            np.ndarray or float or complex: 
+            numpy.ndarray or float or complex: 
                 - If both indices are provided: Returns a single scalar value.
-                - If only alpha_idx is provided: Returns a 1D waveform across the sweep.
-                - If only step_idx is provided: Returns a 1D transfer curve across alphas.
-                - If no indices are provided: Returns a 2D surface matrix (Alphas x Sweep).
+                - If only var_idx is provided: Returns a 1D waveform across the sweep.
+                - If only step_idx is provided: Returns a 1D transfer curve across variations.
+                - If no indices are provided: Returns a 2D surface matrix (Variations x Sweep).
         """
         n_idx = self.node_map[str(node)]
         
-        if alpha_idx is not None and step_idx is not None:
-            return self.data[alpha_idx, step_idx, n_idx]
-        elif alpha_idx is not None:
-            return self.data[alpha_idx, :, n_idx] 
-        elif step_idx is not None:
+        if var_idx is not None and step_idx is not None: 
+            return self.data[var_idx, step_idx, n_idx]
+        elif var_idx is not None: 
+            return self.data[var_idx, :, n_idx] 
+        elif step_idx is not None: 
             return self.data[:, step_idx, n_idx] 
-        else:
+        else: 
             return self.data[:, :, n_idx] 
 
 
 class LargeChangeEngine:
-    """Executes simultaneous large-change sensitivity using Woodbury's Formula.
+    """A unified sensitivity engine using Woodbury-accelerated Newton-Raphson.
 
-    This engine identifies the most sensitive components in a circuit and 
-    calculates exact voltage variations for large parameter changes. 
-    It leverages the Sherman-Morrison-Woodbury matrix identity to mathematically 
-    inject parameter changes into the admittance matrix without requiring 
-    computationally expensive O(N^1.5) LU refactorizations.
+    This engine executes simultaneous large-change parameter sweeps. By injecting
+    the ExplicitWoodburyStrategy into the standard NonlinearSolver, it avoids
+    rebuilding and re-factorizing the global MNA matrix for every parameter
+    variation, drastically accelerating large change analysis.
 
     Attributes:
-        circuit (Circuit): The initialized circuit object.
+        circuit (Circuit): The initialized main circuit orchestrator.
+        param_map (dict): A cached O(1) lookup dictionary mapping parameter
+            names to their parent Component objects, preventing string parsing bugs.
     """
     
     def __init__(self, circuit):
         """Initializes the Large Change Engine.
 
         Args:
-            circuit (Circuit): The main circuit containing the component topologies.
+            circuit (Circuit): The active circuit orchestrator.
         """
         self.circuit = circuit
-
-
-    def _build_PQ_topology(self, param_names):
-        """Extracts the topological connection matrices P and Q.
-
-        In MNA, a parameter change delta_Y can be factored into P * Delta * Q^T.
-        This method maps where each changing component injects current (P) 
-        and extracts voltage (Q) within the global matrix.
-
-        Args:
-            param_names (list[str]): The names of the k components being varied.
-
-        Returns:
-            tuple[np.ndarray, np.ndarray]: Two (N x k) matrices representing 
-            the injection (P) and extraction (Q) topologies.
-        """
-        N = self.circuit.total_dim
-        k = len(param_names)
-        
-        P = np.zeros((N, k))
-        Q = np.zeros((N, k))
-        
-        for col_idx, param in enumerate(param_names):
-            comp_name = param.split("_")[0] 
-            comp = next(c for c in self.circuit.components if c.name == comp_name)
-            
-            # Pass the matrices and the target column index by reference
-            comp.stamp_PQ(P, Q, col_idx)
-
-        return P, Q
-
-    def _get_delta_y(self, param, dp, domain, w, dt, method):
-        """Transforms a physical parameter change into a matrix Admittance change.
-        
-        Delegates the physics transformation directly to the polymorphic component.
-        """
-        comp_name = param.split("_")[0]
-        comp = next(c for c in self.circuit.components if c.name == comp_name)
-        
-        # Ask the component to translate its own physical change!
-        return comp.get_delta_y(param, dp, domain=domain, w=w, dt=dt, method=method)
+        self.param_map = circuit.param_to_component_map
 
     def compute(self, result, param_names, dp_matrix, variation_axis, method="TR"):
-        """Executes Woodbury large-change sweeps using an agnostic Delta P matrix.
+        """Executes simultaneous parameter sweeps using the Woodbury Identity.
 
         Args:
-            result (SimulationResult): The vault containing VI and cached LUs.
-            param_names (list[str]): The k parameters being simultaneously varied.
-            dp_matrix (np.ndarray): A 2D array of shape (V, k) where V is the 
-                number of sweep variations and k is the number of parameters.
-                Each row contains the exact physical shift for each parameter.
-            variation_axis (np.ndarray): The 1D labels for the V variations 
+            result (SimulationResult): The vault containing the baseline simulation's 
+                VI state vectors, cached LU factorizations, and sweep axes.
+            param_names (list[str]): The k parameter names being varied 
+                (e.g., ['R1_value', 'M1_W']).
+            dp_matrix (numpy.ndarray): A 2D array of shape (V, k) where V is the 
+                number of sweep variations. Each row contains the exact physical 
+                shift (Delta P) for each parameter.
+            variation_axis (numpy.ndarray): The 1D labels for the V variations 
                 (e.g., an alpha array, or Monte Carlo run indices) for plotting.
-            method (str): Integration scheme.
-            
+            method (str, optional): The numerical integration method ("TR" or "BE"). 
+                Defaults to "TR".
+                
         Returns:
-            LargeChangeData: The calculated circuit voltages.
+            LargeChangeData: The calculated circuit voltages for all variations.
         """
-        if not result.list_of_lus:
-            raise ValueError("Large-change analysis requires cached LU factorizations.")
-
-        k = len(param_names)
         num_variations = dp_matrix.shape[0]
-        
-        # 1. Topology Construction
-        P, Q = self._build_PQ_topology(param_names)
-        
-        # 2. Allocate Data Vault (Now using the agnostic variation_axis)
         lc_data = LargeChangeData(variation_axis, result.sweep_axis, result.node_map)
         
-        domain = getattr(result, 'domain', 'time') # Fallback if sensitivities aren't present
-        dt = getattr(result, 'dt', 0.0) 
+        domain = getattr(result, 'domain', 'time')
+        dt = getattr(result, 'dt', 0.0)
+
+        # 1. Cache pristine parameters safely
+        original_values = {
+            p: self.param_map[p].get_nominal_value(p) 
+            for p in param_names
+        }
+
+        # Initialize the cascading solver with logging turned off for speed
+        nl_solver = NonlinearSolver(self.circuit, print_stuff=False)
         
-        print(f"\n--- Executing Agnostic Woodbury Sweeps ({num_variations} variations) ---")
+        print(f"\n--- Executing Unified Woodbury-Accelerated Sweeps ({num_variations} variations) ---")
+        for v_idx in range(num_variations):
+            
+            # A. Physically update the component parameters safely
+            current_dp = dp_matrix[v_idx, :]
+            for i, param in enumerate(param_names):
+                comp = self.param_map[param]
+                comp.set_nominal_value(param, original_values[param] + current_dp[i])
+            
+            self.circuit.clear_cache()
+            v_prev_variation = np.zeros(self.circuit.total_dim)
+
+            # B. Sweep through the simulation steps (Time or Frequency)
+            for step_idx in range(len(result.sweep_axis)):
+                V_baseline = result.VI[step_idx]
+                lu_base = result.list_of_lus[step_idx]
+                
+                t = result.sweep_axis[step_idx] if domain == "time" else 0.0
+                w = 2 * np.pi * result.sweep_axis[step_idx] if domain == "frequency" else 0.0
+
+                # WOODBURY STRATEGY: Initialize with precomputed PQ topologies
+                # We pass the exact dp vector for this variation to the strategy
+                woodbury_strategy = ExplicitWoodburyStrategy(
+                    self.circuit, param_names, lu_base, V_baseline, dp_array=current_dp
+                )
+
+                # Maintain transient history correctly based on the domain
+                v_prev = v_prev_variation if domain == "time" else V_baseline
+
+                # THE UNIFIED SOLVE: 
+                # Injects the Woodbury Strategy into the core Newton-Raphson loop.
+                # Linear circuits converge in exactly 1 iteration.
+                _, v_converged = nl_solver.solve(
+                    v_ini=V_baseline, domain=domain, t=t, dt=dt, v_prev=v_prev,
+                    method=method, strategy=woodbury_strategy 
+                )
+                
+                lc_data.data[v_idx, step_idx, :] = v_converged
+                v_prev_variation = v_converged.copy()
+
+        # 2. Restore Circuit to Pristine State to avoid side effects
+        for param, val in original_values.items():
+            comp = self.param_map[param]
+            comp.set_nominal_value(param, val)
+            
+        self.circuit.clear_cache()
         
-        # 3. Time/Freq Sweep Axis Execution
-        for step_idx in range(len(result.sweep_axis)):
-            V_n = result.VI[step_idx]
-            lu = result.list_of_lus[step_idx]
-            w = 2 * np.pi * result.sweep_axis[step_idx] if domain == "frequency" else 0.0
-            
-            # Precompute heavy matrix logic
-            X = lu.solve(P)  
-            QT_V = Q.T @ V_n 
-            QT_X = Q.T @ X   
-            
-            # 4. Variations Loop (Iterating over the rows of dp_matrix)
-            for v_idx in range(num_variations):
-                
-                # Build the k x k Diagonal Matrix strictly from the input matrix
-                delta_matrix = np.zeros((k, k), dtype=complex)
-                for i, param in enumerate(param_names):
-                    
-                    # Extract the exact physical Delta P for this specific variation step
-                    dp = dp_matrix[v_idx, i] 
-                    
-                    delta_matrix[i, i] = self._get_delta_y(param, dp, domain, w, dt, method)
-                    
-                # Woodbury Core: (I + Delta * Q^T * X)
-                I_k = np.eye(k)
-                M = I_k + delta_matrix @ QT_X
-                
-                # Inversion and Update
-                inv_M = np.linalg.inv(M)
-                dV = -X @ (inv_M @ (delta_matrix @ QT_V))
-                
-                lc_data.data[v_idx, step_idx, :] = V_n + dV
-                
-        if domain != "frequency":
+        # Real-world time-domain data strips imaginary artifacts
+        if domain != "frequency": 
             lc_data.data = np.real(lc_data.data)
             
         return lc_data
