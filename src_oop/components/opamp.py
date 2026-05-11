@@ -7,6 +7,8 @@ class OpAmp(Component):
     V(out, gnd) = Gain * (V(n_plus) - V(n_minus))
     """
 
+    REQUIRES_BRANCH_EQ = True
+
     def bind_nodes(self, node_map):
         # Input terminals
         self.idx_p = node_map.get(self.data.get("n1", 0)) # Non-inverting (+)
@@ -22,32 +24,35 @@ class OpAmp(Component):
         self.gain = self.data.get("value", 1e5)
 
     # ==========================================
-    # SOLVER ENGINES (Stamping)
+    # 1. STATIC STAMPING (Skeleton Matrix)
     # ==========================================
-    def stamp_mna_connection(self, Y):
+    def stamp_base_matrix(self, Y):
         """
-        Stamps the VCVS MNA equations.
+        Phase 1: Stamps the time/voltage-invariant VCVS MNA equations.
         Equation: V_out - Gain*(V_p - V_m) = 0
         """
-        if self.branch_idx is None: return
+        b = self.branch_idx
+        if b is None: return
 
-        # 1. Output current flows into the output node
+        # 1. Output terminal current assignment (KVL / KCL intersection)
+        # Current flows OUT of idx_out, through the branch, to ground.
         if self.idx_out is not None:
-            Y[self.idx_out, self.branch_idx] += 1.0
-            Y[self.branch_idx, self.idx_out] += 1.0
+            Y[self.idx_out, b] += 1.0  # Branch current leaves the output node
+            Y[b, self.idx_out] += 1.0  # V_out term in the branch equation
 
         # 2. Control voltage dependencies in the branch row
         if self.idx_p is not None:
-            Y[self.branch_idx, self.idx_p] -= self.gain
+            Y[b, self.idx_p] -= self.gain
         if self.idx_m is not None:
-            Y[self.branch_idx, self.idx_m] += self.gain
+            Y[b, self.idx_m] += self.gain
 
     # ==========================================
-    # SENSITIVITY ENGINES (Adjoint & Woodbury)
+    # 2. SENSITIVITY & WOODBURY ENGINES
     # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
-        """Calculates sensitivity w.r.t Open-Loop Gain (A)."""
-        if self.branch_idx is None: return {}
+        """Calculates exact sensitivity w.r.t Open-Loop Gain (A)."""
+        b = self.branch_idx
+        if b is None: return {}
 
         # Forward differential input
         vp = VI[self.idx_p] if self.idx_p is not None else 0.0
@@ -55,7 +60,7 @@ class OpAmp(Component):
         v_diff = vp - vm
 
         # Adjoint branch variable
-        psi_branch = PsiPhi[self.branch_idx]
+        psi_branch = PsiPhi[b]
 
         # Adjoint formula: Psi_branch * (V_plus - V_minus)
         return {self.name: psi_branch * v_diff}

@@ -4,6 +4,8 @@ import numpy as np
 
 class CurrentSource(Component):
     """An independent current source (Type 'I')."""
+
+    IS_INDEPENDENT_SOURCE = True
     
     def __init__(self, name, data_dict):
         super().__init__(name, data_dict)
@@ -24,22 +26,27 @@ class CurrentSource(Component):
         self.idx_2 = node_map.get(self.data.get("n2", 0))
 
     # ==========================================
-    # SOLVER ENGINES (Stamping)
+    # 1. STATIC STAMPING (Independent Sources)
     # ==========================================
-    def stamp_dc(self, Y, sources):
-        """Stamps the steady-state DC value (at t=0)."""
-        val = self.waveform.get_value(0.0) if self.waveform else self.value
-        self._apply_rhs_stamp(sources, val)
-
-    def stamp_transient(self, Y, sources, t, dt, v_prev, method='TR'):
-        """Stamps the time-varying value based on the waveform function."""
-        val = self.waveform.get_value(t) if self.waveform else self.value
-        self._apply_rhs_stamp(sources, val)
-
-    def stamp_ac(self, Y, sources, w):
-        """Stamps the complex AC phasor."""
-        if self.ac_mag != 0.0:
-            self._apply_rhs_stamp(sources, self.phasor)
+    def stamp_sources(self, J, domain, t=0.0):
+        """Phase 2 (Sources): Stamps steady-state, time-varying, or AC phasors.
+        
+        Bypasses the evaluate_physics pipeline because independent sources 
+        do not depend on the dynamic voltage state (V_k), saving NR iterations.
+        """
+        if domain == "frequency":
+            # Small-signal AC suppresses independent DC/Transient sources
+            if self.ac_mag != 0.0:
+                self._apply_rhs_stamp(J, self.phasor)
+            return 
+            
+        # Determine the current value based on the domain and waveform
+        if self.waveform is not None:
+            current_val = self.waveform.get_value(t if domain == "time" else 0.0)
+        else:
+            current_val = self.value
+            
+        self._apply_rhs_stamp(J, current_val)
 
     def _apply_rhs_stamp(self, sources, current_val):
         """Internal helper to apply the nodal current flow."""
@@ -49,7 +56,7 @@ class CurrentSource(Component):
             sources[self.idx_2] += current_val
 
     # ==========================================
-    # SENSITIVITY ENGINES (Adjoint & Woodbury)
+    # 2. SENSITIVITY ENGINES (Adjoint & Woodbury)
     # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Returns the sensitivity of the output w.r.t the source value.

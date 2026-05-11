@@ -4,7 +4,6 @@ class CCCS(Component):
     """
     Current-Controlled Current Source (Type 'F').
     I(n1, n2) = Gain * I(Vcontrol)
-
     """
 
     def bind_nodes(self, node_map):
@@ -19,10 +18,14 @@ class CCCS(Component):
         if self.ctrl_branch_idx is None:
             raise ValueError(
                 f"CCCS '{self.name}': controlling source '{ctrl_name}' "
-                f"not found in circuit. It must be a voltage source."
+                f"not found in circuit. It must be an independent/dependent voltage source."
             )
 
-    def stamp_static(self, Y):
+    # ==========================================
+    # 1. STATIC STAMPING (Skeleton Matrix)
+    # ==========================================
+    def stamp_base_matrix(self, Y):
+        """Phase 1: Stamps time/voltage-invariant gain into the skeleton matrix."""
         b = self.ctrl_branch_idx
         g = self.gain
 
@@ -32,8 +35,11 @@ class CCCS(Component):
         if self.idx_2 is not None:
             Y[self.idx_2, b] -= g
 
+    # ==========================================
+    # 2. SENSITIVITY & WOODBURY ENGINES
+    # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
-        """Calculates sensitivity w.r.t Gain (alpha)."""
+        """Calculates exact sensitivity w.r.t Gain (alpha)."""
         if self.ctrl_branch_idx is None: return {}
 
         # Forward: controlling branch current
@@ -47,7 +53,7 @@ class CCCS(Component):
         return {self.name: -(psi_output * i_ctrl)}
 
     def stamp_PQ(self, P, Q, col_idx):
-        """Stamps the CCCS topology. 
+        """Stamps the CCCS Woodbury topology. 
         
         Current Injection (P): Output nodes.
         State Extraction (Q): Controlling branch current.
@@ -60,7 +66,7 @@ class CCCS(Component):
         if out2 is not None: P[out2, col_idx] = -1.0
         
         # Q: What is the state variable controlling the source?
-        # For a CCCS, it's the current flowing through the controlling branch!
+        # For a CCCS, it's the absolute current flowing through the controlling branch!
         if b_ctrl is not None: Q[b_ctrl, col_idx] = 1.0
 
     def get_delta_y(self, param_name, dp, **kwargs):

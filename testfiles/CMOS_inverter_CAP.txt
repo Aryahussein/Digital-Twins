@@ -1,0 +1,23 @@
+* CMOS Inverter Driving a Capacitive Load
+* Nodes: VDD (1), GND (0), Input (in), Output (out)
+
+* Power Supply (1.8V)
+VDD 1 0 1.8
+
+* Input Signal (Pulse: 0 to 1.8V, 1ns delay, 100ps rise/fall, 2ns width, 4ns period)
+Vin in 0 PULSE(0 1.8 1n 100p 100p 2n 4n)
+
+* Inverter PMOS (pull-up)
+M_P out in 1 1 PMOS W=2u L=0.18u
+
+* Inverter NMOS (pull-down)
+M_N out in 0 0 NMOS W=1u L=0.18u
+
+* Load Capacitance
+CL out 0 50f
+
+.MODEL NMOS NMOS (LEVEL=1 VTO=0.4 KP=170u GAMMA=0.5 LAMBDA=0.1 PHI=0.7)
+.MODEL PMOS PMOS (LEVEL=1 VTO=-0.4 KP=50u GAMMA=0.5 LAMBDA=0.1 PHI=0.7)
+
+* Analyses
+.TRAN 10p 10n

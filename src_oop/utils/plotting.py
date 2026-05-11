@@ -881,3 +881,57 @@ def plot_combined_yield_pdf(
     plt.savefig(filepath, dpi=300)
     plt.close()
     print(f"Combined PDF plot saved to {filepath}")
+
+def plot_transient_envelope(base_result, lc_results, target_node, eval_step, spec_min, spec_max, folder, name):
+    """Helper function to plot the min/max transient envelope."""
+    import os
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+    t_axis = base_result.sweep_axis * 1e9  # Convert to ns
+    n_idx = base_result.node_map[target_node]
+    
+    # Extract nominal waveform
+    v_nominal = base_result.VI[:, n_idx]
+    
+    # Extract min and max bounds from the Large Change Woodbury sweep
+    all_waveforms = lc_results.data[:, :, n_idx]
+    v_min = np.min(all_waveforms, axis=0)
+    v_max = np.max(all_waveforms, axis=0)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plot the envelope ribbon
+    ax.fill_between(t_axis, v_min, v_max, color='red', alpha=0.2, label='Worst-Case Spread (±20%)')
+    
+    # Plot the nominal line
+    ax.plot(t_axis, v_nominal, color='black', linewidth=2, label='Nominal Waveform')
+
+    # Mark the evaluation point and thresholds
+    t_eval = t_axis[eval_step]
+    ax.axvline(t_eval, color='blue', linestyle='--', alpha=0.7, label=f'Eval Point (t={t_eval:.2f}ns)')
+    
+    # Plot the 3-Sigma Spec Window limits
+    ax.axhline(spec_max, color='green', linestyle=':', linewidth=2, label=f'Upper Spec Limit ({spec_max:.3f}V)')
+    ax.axhline(spec_min, color='green', linestyle=':', linewidth=2, label=f'Lower Spec Limit ({spec_min:.3f}V)')
+
+    # Look for constraint violations at the evaluation point
+    spread_min_at_eval = v_min[eval_step]
+    spread_max_at_eval = v_max[eval_step]
+    
+    if spread_max_at_eval > spec_max or spread_min_at_eval < spec_min:
+        ax.plot(t_eval, spread_max_at_eval if spread_max_at_eval > spec_max else spread_min_at_eval, 
+                'rX', markersize=12, label='Threshold Violation')
+        plt.title(f"Yield Failure Detected!\nSpread exceeds limits at Evaluation Point", color='red', fontweight='bold')
+    else:
+        plt.title(f"Yield Pass\n±20% sweep remains within bounds", color='green', fontweight='bold')
+
+    ax.set_xlabel("Time (ns)", fontweight='bold')
+    ax.set_ylabel(f"Voltage at {target_node} (V)", fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='best')
+    
+    plt.tight_layout()
+    plt.savefig(f"{folder}/{name}.png", dpi=300)
+    plt.close()
+    print(f"Transient envelope plot saved to {folder}/{name}.png")

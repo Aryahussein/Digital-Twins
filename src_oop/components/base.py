@@ -20,7 +20,11 @@ class Component:
         idx_2 (int or None): The secondary matrix index (often negative terminal).
     """
 
-    IS_NONLINEAR = False
+    IS_NONLINEAR = False          # Requires Newton-Raphson iteration
+    IS_DYNAMIC = False            # Requires time-domain Companion Models (dt)
+    IS_AC_REACTIVE = False        # Requires frequency-domain Phasors (w)
+    IS_INDEPENDENT_SOURCE = False # Stamped directly into the RHS vector
+    REQUIRES_BRANCH_EQ = False
 
     def __init__(self, name, data_dict):
         self.name = name
@@ -52,19 +56,21 @@ class Component:
         """
         return self.value
 
+    def set_nominal_value(self, param_name, new_val):
+        """Updates the physical value of the component."""
+        self.value = new_val
+
     # === POLYMORPHIC METHODS ===
-    def stamp_mna_connection(self, Y):
-        """Stamps MNA branch topology (+1/-1) into the admittance matrix."""
+
+    def stamp_base_matrix(self, Y):
+        """Phase 1 (Skeleton): Stamps time-invariant, voltage-invariant MNA topology (+1/-1) and fixed Conductances (1/R). Run ONCE."""
         pass
-        
-    def stamp_static(self, Y):
-        """Stamps time/frequency-independent linear terms (e.g., Conductance)."""
+
+
+    def stamp_sources(self, J, domain, t=0.0):
+        """Phase 2 (Sources): Stamps independent values into the RHS vector. Safe to run in loops."""
         pass
-        
-    def stamp_dc(self, Y, sources):
-        """Stamps DC values for Operating Point (.OP) and initial transient steps."""
-        pass
-        
+
     def stamp_ac(self, Y, sources, w):
         """Stamps frequency-dependent complex impedances and AC phasors.
         
@@ -72,19 +78,26 @@ class Component:
             w (float): Angular frequency in rad/s.
         """
         pass
-        
-    def stamp_transient(self, Y, sources, t, dt, v_prev,method='TR'): 
-        """Stamps dynamic companion models (Backward Euler) and time-varying sources.
-        
-        Args:
-            t (float): Current simulation time in seconds.
-            dt (float): Current time step size.
-            v_prev (np.ndarray): The solution vector from the previous time step.
+
+    def evaluate_physics(self, *args, **kwargs):
+        """Pure mathematical evaluation of component physics.
+        Returns a dictionary of matrix values (e.g., {'G_11': val, 'I_1': val}).
+        """
+        return {}
+
+    def stamp_matrix(self, Y, res, *args):
+        """Generic matrix stamper.
+        By default, looks for a generic mapping in 'res' or relies on subclasses
+        to implement explicit stamping logic.
         """
         pass
 
-    def update_transient_state(self, v_now, method='TR'):
-        "Updates internal state after each transient step (used by TR)."
+    def stamp_rhs(self, J, res, *args):
+        """Generic RHS stamper."""
+        pass
+
+    def update_transient_state(self, v_now, v_prev, dt, method='TR'):
+        """Updates internal history state after a converged transient step."""
         pass
 
     def stamp_nonlinear(self, Y, sources, p_V_guess, V_guess):
