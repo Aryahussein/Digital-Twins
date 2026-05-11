@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Digital Twins Course EDA Documentation &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Main Execution Script" href="simulation_core.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="digital-twins-course-eda-documentation">
+<h1>Digital Twins Course EDA Documentation<a class="headerlink" href="#digital-twins-course-eda-documentation" title="Link to this heading">¶</a></h1>
+<p>Contents:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="simulation_core.html#functions">Functions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="circuit.html#factory-helper">Factory Helper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="circuit.html#circuit-class">Circuit Class</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="thermal_constants.html#e"><code class="docutils literal notranslate"><span class="pre">e</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="thermal_constants.html#kb"><code class="docutils literal notranslate"><span class="pre">kb</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="thermal_constants.html#T"><code class="docutils literal notranslate"><span class="pre">T</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="thermal_constants.html#Vt"><code class="docutils literal notranslate"><span class="pre">Vt</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="thermal_constants.html#usage-example">Usage example</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="diode_mosfet_models.html#evaluate_diode"><code class="docutils literal notranslate"><span class="pre">evaluate_diode()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="diode_mosfet_models.html#evaluate_nmos"><code class="docutils literal notranslate"><span class="pre">evaluate_nmos()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="results.html#SensitivityData"><code class="docutils literal notranslate"><span class="pre">SensitivityData</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="results.html#SimulationResult"><code class="docutils literal notranslate"><span class="pre">SimulationResult</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="waveforms.html#Waveform"><code class="docutils literal notranslate"><span class="pre">Waveform</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="waveforms.html#example-usage">Example usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="ac_engine.html#ACEngine"><code class="docutils literal notranslate"><span class="pre">ACEngine</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ac_engine.html#ACEngine._solve_single_point"><code class="docutils literal notranslate"><span class="pre">ACEngine._solve_single_point()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ac_engine.html#example-usage">Example usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dc_engine.html#DCEngine"><code class="docutils literal notranslate"><span class="pre">DCEngine</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dc_engine.html#example-usage">Example usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="adjoint_engine.html#AdjointEngine"><code class="docutils literal notranslate"><span class="pre">AdjointEngine</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adjoint_engine.html#AdjointEngine._solve_adjoint"><code class="docutils literal notranslate"><span class="pre">AdjointEngine._solve_adjoint()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adjoint_engine.html#AdjointEngine.compute_transient"><code class="docutils literal notranslate"><span class="pre">AdjointEngine.compute_transient()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adjoint_engine.html#example-usage">Example usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="gui.html#CircuitSimulatorGUI"><code class="docutils literal notranslate"><span class="pre">CircuitSimulatorGUI</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="gui.html#key-methods">Key Methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gui.html#additional-details">Additional Details</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="parser.html#NetlistParser"><code class="docutils literal notranslate"><span class="pre">NetlistParser</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="parser.html#key-methods">Key Methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parser.html#component-miniparsers">Component Mini‑Parsers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parser.html#utility-functions">Utility Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parser.html#helper-methods">Helper Methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parser.html#example-usage">Example Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plotting.html#make_bode_plot"><code class="docutils literal notranslate"><span class="pre">make_bode_plot()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotting.html#print_solution"><code class="docutils literal notranslate"><span class="pre">print_solution()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="fault_analysis.html#rank_component_sensitivities"><code class="docutils literal notranslate"><span class="pre">rank_component_sensitivities()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="fault_analysis.html#perform_global_ranking"><code class="docutils literal notranslate"><span class="pre">perform_global_ranking()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="fault_analysis.html#print_fault_table"><code class="docutils literal notranslate"><span class="pre">print_fault_table()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="fault_analysis.html#print_threshold_table"><code class="docutils literal notranslate"><span class="pre">print_threshold_table()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="large_change_sensitivity.html#build_xi"><code class="docutils literal notranslate"><span class="pre">build_xi()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="large_change_sensitivity.html#compute_large_change"><code class="docutils literal notranslate"><span class="pre">compute_large_change()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="component_base.html#Component"><code class="docutils literal notranslate"><span class="pre">Component</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="component_base.html#Component.differentiable_params"><code class="docutils literal notranslate"><span class="pre">Component.differentiable_params</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="component_base.html#polymorphic-matrixstamping-methods">Polymorphic Matrix‑Stamping Methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="component_base.html#adjoint-sensitivity-methods">Adjoint Sensitivity Methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="component_base.html#helper-method">Helper Method</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="component_capacitor.html#Capacitor"><code class="docutils literal notranslate"><span class="pre">Capacitor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="component_capacitor.html#overridden-methods">Overridden Methods</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading">¶</a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="#">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+      <li>Next: <a href="simulation_core.html" title="next chapter">Main Execution Script</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

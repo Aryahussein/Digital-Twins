@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Circuit Component Base Class &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Capacitor Component" href="component_capacitor.html" />
+    <link rel="prev" title="Large‑Change Sensitivity Utilities" href="large_change_sensitivity.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="circuit-component-base-class">
+<span id="component-base-module"></span><h1>Circuit Component Base Class<a class="headerlink" href="#circuit-component-base-class" title="Link to this heading">¶</a></h1>
+<p>This module defines the abstract <a class="reference internal" href="#Component" title="Component"><code class="xref py py-class docutils literal notranslate"><span class="pre">Component</span></code></a> class that all circuit elements
+inherit from.  It specifies the interface for matrix stamping, sensitivity
+calculations, transient state updates and adjoint operations.</p>
+<hr class="docutils" />
+<dl class="py class">
+<dt class="sig sig-object py" id="Component">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Component</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#Component" title="Link to this definition">¶</a></dt>
+<dd><p>Abstract base class for all SPICE components.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>name<span class="classifier">str</span></dt><dd><p>Netlist identifier (e.g. <code class="docutils literal notranslate"><span class="pre">'R1'</span></code>).</p>
+</dd>
+<dt>type<span class="classifier">str</span></dt><dd><p>Component type character as parsed from the netlist.</p>
+</dd>
+<dt>value<span class="classifier">float</span></dt><dd><p>Default component value (if applicable).</p>
+</dd>
+<dt>data<span class="classifier">dict</span></dt><dd><p>Raw dictionary of parameters produced by <a class="reference internal" href="parser.html#NetlistParser" title="NetlistParser"><code class="xref py py-class docutils literal notranslate"><span class="pre">NetlistParser</span></code></a>.</p>
+</dd>
+<dt>idx_1, idx_2<span class="classifier">int | None</span></dt><dd><p>Matrix indices for the two terminals.  Set by <code class="xref py py-meth docutils literal notranslate"><span class="pre">bind_nodes()</span></code>.</p>
+</dd>
+</dl>
+</section>
+<section id="class-attribute">
+<h2>Class Attribute<a class="headerlink" href="#class-attribute" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>IS_NONLINEAR<span class="classifier">bool</span></dt><dd><p><code class="docutils literal notranslate"><span class="pre">True</span></code> if the component requires Newton‑Raphson iteration.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<hr class="docutils" />
+<dl class="py property">
+<dt class="sig sig-object py" id="Component.differentiable_params">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">Component.</span></span><span class="sig-name descname"><span class="pre">differentiable_params</span></span><a class="headerlink" href="#Component.differentiable_params" title="Link to this definition">¶</a></dt>
+<dd><p>Returns a list of parameter names that the component can produce sensitivities for.
+The default implementation returns <code class="docutils literal notranslate"><span class="pre">[self.name]</span></code>.</p>
+</dd></dl>
+
+<hr class="docutils" />
+<section id="polymorphic-matrixstamping-methods">
+<h2>Polymorphic Matrix‑Stamping Methods<a class="headerlink" href="#polymorphic-matrixstamping-methods" title="Link to this heading">¶</a></h2>
+<p>All components must implement the following methods.  They are called by the various simulation engines.</p>
+</section>
+<hr class="docutils" />
+<section id="adjoint-sensitivity-methods">
+<h2>Adjoint Sensitivity Methods<a class="headerlink" href="#adjoint-sensitivity-methods" title="Link to this heading">¶</a></h2>
+</section>
+<hr class="docutils" />
+<section id="helper-method">
+<h2>Helper Method<a class="headerlink" href="#helper-method" title="Link to this heading">¶</a></h2>
+<hr class="docutils" />
+<p>Example subclass (Resistor)</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Resistor</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span>
+    <span class="n">IS_NONLINEAR</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stamp_static</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">):</span>
+        <span class="n">g</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span>
+        <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idx_1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">idx_2</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">Y</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="n">g</span>
+            <span class="n">Y</span><span class="p">[</span><span class="n">j</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">+=</span> <span class="n">g</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">j</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">Y</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">-=</span> <span class="n">g</span>
+            <span class="n">Y</span><span class="p">[</span><span class="n">j</span><span class="p">,</span><span class="n">i</span><span class="p">]</span> <span class="o">-=</span> <span class="n">g</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Circuit Component Base Class</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Component"><code class="docutils literal notranslate"><span class="pre">Component</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Component.differentiable_params"><code class="docutils literal notranslate"><span class="pre">Component.differentiable_params</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#polymorphic-matrixstamping-methods">Polymorphic Matrix‑Stamping Methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adjoint-sensitivity-methods">Adjoint Sensitivity Methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#helper-method">Helper Method</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="large_change_sensitivity.html" title="previous chapter">Large‑Change Sensitivity Utilities</a></li>
+      <li>Next: <a href="component_capacitor.html" title="next chapter">Capacitor Component</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/component_base.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

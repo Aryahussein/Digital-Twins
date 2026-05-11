@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Simulation Result &amp; Sensitivity Data &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Time‑Domain Waveform Module" href="waveforms.html" />
+    <link rel="prev" title="Diode &amp; NMOS Level‑1 Models" href="diode_mosfet_models.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="simulation-result-sensitivity-data">
+<span id="results-module"></span><h1>Simulation Result &amp; Sensitivity Data<a class="headerlink" href="#simulation-result-sensitivity-data" title="Link to this heading">¶</a></h1>
+<p>This module provides two high‑level containers that are returned by the simulator:
+<a href="#id1"><span class="problematic" id="id2">``</span></a><a href="#id3"><span class="problematic" id="id4">`</span></a></p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#SensitivityData" title="SensitivityData"><code class="xref py py-class docutils literal notranslate"><span class="pre">SensitivityData</span></code></a> – A unified 3‑D tensor for all sensitivity results.</p></li>
+<li><p><a class="reference internal" href="#SimulationResult" title="SimulationResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SimulationResult</span></code></a> – The “vault” that stores raw simulation outputs and, when available, the associated sensitivities.</p></li>
+</ul>
+<hr class="docutils" />
+<dl class="py class">
+<dt class="sig sig-object py" id="SensitivityData">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">SensitivityData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sweep_axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_names</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_nodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domain</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'static'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SensitivityData" title="Link to this definition">¶</a></dt>
+<dd><p>Holds a 3‑D tensor of shape <em>(Parameters × Output Nodes × Sweep Steps)</em>.
+The class offers convenient query helpers that hide the raw NumPy indexing from the user.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SensitivityData.sweep_axis">
+<span class="sig-name descname"><span class="pre">sweep_axis</span></span><a class="headerlink" href="#SensitivityData.sweep_axis" title="Link to this definition">¶</a></dt>
+<dd><p><code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code> – Independent variable array (time, frequency, voltage, or single value for .OP).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SensitivityData.domain">
+<span class="sig-name descname"><span class="pre">domain</span></span><a class="headerlink" href="#SensitivityData.domain" title="Link to this definition">¶</a></dt>
+<dd><p>Physical domain of the sweep (<cite>“time”</cite>, <cite>“frequency”</cite>, <cite>“voltage”</cite>, <cite>“static”</cite>).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SensitivityData.param_names">
+<span class="sig-name descname"><span class="pre">param_names</span></span><a class="headerlink" href="#SensitivityData.param_names" title="Link to this definition">¶</a></dt>
+<dd><p>Ordered list of parameter names (axis‑0 labels).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SensitivityData.output_nodes">
+<span class="sig-name descname"><span class="pre">output_nodes</span></span><a class="headerlink" href="#SensitivityData.output_nodes" title="Link to this definition">¶</a></dt>
+<dd><p>Ordered list of output node names (axis‑1 labels).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SensitivityData.data">
+<span class="sig-name descname"><span class="pre">data</span></span><a class="headerlink" href="#SensitivityData.data" title="Link to this definition">¶</a></dt>
+<dd><p><code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code> – The underlying 3‑D sensitivity tensor.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SensitivityData.param_index">
+<span class="sig-name descname"><span class="pre">param_index</span></span><a class="headerlink" href="#SensitivityData.param_index" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SensitivityData.output_index">
+<span class="sig-name descname"><span class="pre">output_index</span></span><a class="headerlink" href="#SensitivityData.output_index" title="Link to this definition">¶</a></dt>
+<dd><p>Dictionaries mapping names → indices for fast lookup.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="SensitivityData.get_sweep_series">
+<span class="sig-name descname"><span class="pre">get_sweep_series</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_node</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SensitivityData.get_sweep_series" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the 1‑D array of partial derivatives <em>∂output/∂param</em> across the sweep axis.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>param</strong> (<em>str</em>) – Parameter name.</p></li>
+<li><p><strong>output_node</strong> (<em>str</em><em>|</em><em>int</em>) – Target node.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">numpy.ndarray</span></code> – 1‑D sensitivity series.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="SensitivityData.get_matrix_at_step">
+<span class="sig-name descname"><span class="pre">get_matrix_at_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step_idx</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SensitivityData.get_matrix_at_step" title="Link to this definition">¶</a></dt>
+<dd><p>Returns a 2‑D matrix <em>(n_params × n_outputs)</em> at the given sweep index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>step_idx</strong> (<em>int</em>) – Sweep index.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">numpy.ndarray</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="SensitivityData.print_matrix_at_step">
+<span class="sig-name descname"><span class="pre">print_matrix_at_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step_idx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_node</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sens_parameter</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SensitivityData.print_matrix_at_step" title="Link to this definition">¶</a></dt>
+<dd><p>Nicely formatted console output of the sensitivity matrix for a single
+sweep step.  Useful for quick debugging or CLI reporting.</p>
+</dd></dl>
+
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py class">
+<dt class="sig sig-object py" id="SimulationResult">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">SimulationResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">analysis_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sweep_axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">VI_matrix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_map</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimulationResult" title="Link to this definition">¶</a></dt>
+<dd><p>A container that holds all information produced by a simulation run:</p>
+<ul class="simple">
+<li><p>The raw solution matrix (<cite>VI</cite>).</p></li>
+<li><p>The node/branch mapping.</p></li>
+<li><p>Optional <a class="reference internal" href="#SimulationResult.sensitivities" title="SimulationResult.sensitivities"><code class="xref py py-attr docutils literal notranslate"><span class="pre">sensitivities</span></code></a> (an instance of <a class="reference internal" href="#SensitivityData" title="SensitivityData"><code class="xref py py-class docutils literal notranslate"><span class="pre">SensitivityData</span></code></a>).</p></li>
+</ul>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SimulationResult.type">
+<span class="sig-name descname"><span class="pre">type</span></span><a class="headerlink" href="#SimulationResult.type" title="Link to this definition">¶</a></dt>
+<dd><p>Analysis type string (<cite>‘.TRAN’</cite>, <cite>‘.AC’</cite>, <cite>‘.DC’</cite>, <cite>‘.OP’</cite>).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SimulationResult.sweep_axis">
+<span class="sig-name descname"><span class="pre">sweep_axis</span></span><a class="headerlink" href="#SimulationResult.sweep_axis" title="Link to this definition">¶</a></dt>
+<dd><p>Independent variable array.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SimulationResult.VI">
+<span class="sig-name descname"><span class="pre">VI</span></span><a class="headerlink" href="#SimulationResult.VI" title="Link to this definition">¶</a></dt>
+<dd><p>Raw solver output matrix (2‑D for sweeps, 1‑D for .OP).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SimulationResult.node_map">
+<span class="sig-name descname"><span class="pre">node_map</span></span><a class="headerlink" href="#SimulationResult.node_map" title="Link to this definition">¶</a></dt>
+<dd><p>Mapping of node/branch names → column indices in <a class="reference internal" href="#SimulationResult.VI" title="SimulationResult.VI"><code class="xref py py-attr docutils literal notranslate"><span class="pre">VI</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="SimulationResult.sensitivities">
+<span class="sig-name descname"><span class="pre">sensitivities</span></span><a class="headerlink" href="#SimulationResult.sensitivities" title="Link to this definition">¶</a></dt>
+<dd><p>Optional <a class="reference internal" href="#SensitivityData" title="SensitivityData"><code class="xref py py-class docutils literal notranslate"><span class="pre">SensitivityData</span></code></a> instance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="SimulationResult.get_vhats">
+<span class="sig-name descname"><span class="pre">get_vhats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimulationResult.get_vhats" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves the raw adjoint vector history (useful for fault analysis).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="SimulationResult._resolve_node_key">
+<span class="sig-name descname"><span class="pre">_resolve_node_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimulationResult._resolve_node_key" title="Link to this definition">¶</a></dt>
+<dd><p>Internal helper that normalises user‑supplied node identifiers
+to the exact key stored in <a class="reference internal" href="#SimulationResult.node_map" title="SimulationResult.node_map"><code class="xref py py-attr docutils literal notranslate"><span class="pre">node_map</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="SimulationResult.get_voltage">
+<span class="sig-name descname"><span class="pre">get_voltage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimulationResult.get_voltage" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the voltage or branch current array for <em>node</em>.
+Handles complex values for .AC, real values otherwise.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="SimulationResult.get_sensitivity_parameters">
+<span class="sig-name descname"><span class="pre">get_sensitivity_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimulationResult.get_sensitivity_parameters" title="Link to this definition">¶</a></dt>
+<dd><p>List of parameters that have sensitivity data for <em>node</em>.
+Useful for populating UI dropdowns.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="SimulationResult.get_sensitivity">
+<span class="sig-name descname"><span class="pre">get_sensitivity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimulationResult.get_sensitivity" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the sensitivity gradient for a given output node and parameter.
+For single‑point analyses it returns a scalar; otherwise a 1‑D array
+across the sweep axis.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Simulation Result &amp; Sensitivity Data</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#SensitivityData"><code class="docutils literal notranslate"><span class="pre">SensitivityData</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#SimulationResult"><code class="docutils literal notranslate"><span class="pre">SimulationResult</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="diode_mosfet_models.html" title="previous chapter">Diode &amp; NMOS Level‑1 Models</a></li>
+      <li>Next: <a href="waveforms.html" title="next chapter">Time‑Domain Waveform Module</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/results.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Adjoint Sensitivity Engine &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Graphical User Interface" href="gui.html" />
+    <link rel="prev" title="DC Analysis Engine" href="dc_engine.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="adjoint-sensitivity-engine">
+<span id="adjoint-engine-module"></span><h1>Adjoint Sensitivity Engine<a class="headerlink" href="#adjoint-sensitivity-engine" title="Link to this heading">¶</a></h1>
+<p>This module implements <a class="reference internal" href="#AdjointEngine" title="AdjointEngine"><code class="xref py py-class docutils literal notranslate"><span class="pre">AdjointEngine</span></code></a>, which evaluates parameter sensitivities using the adjoint network method.
+The engine supports both <em>continuous</em> (steady‑state, AC, DC, OP) and <em>global transient</em> sensitivity calculations.</p>
+<hr class="docutils" />
+<dl class="py class">
+<dt class="sig sig-object py" id="AdjointEngine">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">AdjointEngine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">circuit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_nodes</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#AdjointEngine" title="Link to this definition">¶</a></dt>
+<dd><p>Initializes the adjoint solver for a given circuit.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="AdjointEngine.circuit">
+<span class="sig-name descname"><span class="pre">circuit</span></span><a class="headerlink" href="#AdjointEngine.circuit" title="Link to this definition">¶</a></dt>
+<dd><p><code class="xref py py-class docutils literal notranslate"><span class="pre">Circuit</span></code> – The main circuit object containing components.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="AdjointEngine.output_nodes">
+<span class="sig-name descname"><span class="pre">output_nodes</span></span><a class="headerlink" href="#AdjointEngine.output_nodes" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">list[str]</span></code> – Nodes that will be used as objectives in the sensitivity analysis.
+The constructor resolves node names against <code class="xref py py-attr docutils literal notranslate"><span class="pre">circuit.node_map</span></code> so that
+strings, integers and mixed types all work correctly.</p>
+</dd></dl>
+
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py method">
+<dt class="sig sig-object py" id="AdjointEngine._solve_adjoint">
+<span class="sig-prename descclassname"><span class="pre">AdjointEngine.</span></span><span class="sig-name descname"><span class="pre">_solve_adjoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lu</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_rhs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_complex</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#AdjointEngine._solve_adjoint" title="Link to this definition">¶</a></dt>
+<dd><p>Internal helper that solves the transposed matrix equation for a single target node.
+The method can be reused by both transient and continuous solvers.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>lu<span class="classifier">LU factorization object</span></dt><dd><p>From the forward solver (e.g., SciPy or custom).</p>
+</dd>
+<dt>target<span class="classifier">str | None</span></dt><dd><p>Node name that will receive an impulse of +1.0 in the RHS.</p>
+</dd>
+<dt>base_rhs<span class="classifier">array_like, optional</span></dt><dd><p>Optional additional RHS vector to be added before solving.</p>
+</dd>
+<dt>is_complex<span class="classifier">bool, optional</span></dt><dd><p>Flag indicating whether complex arithmetic is required (AC analysis).</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>array_like</dt><dd><p>Solution vector <cite>ψ</cite> (adjoint variable) with shape <cite>(total_dim,)</cite>.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py method">
+<dt class="sig sig-object py" id="AdjointEngine.compute_transient">
+<span class="sig-prename descclassname"><span class="pre">AdjointEngine.</span></span><span class="sig-name descname"><span class="pre">compute_transient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">time_array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V_forward</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_of_lus</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'BE'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#AdjointEngine.compute_transient" title="Link to this definition">¶</a></dt>
+<dd><p>Calculates exact <em>global</em> adjoint sensitivities via backward time integration.
+The result is a dictionary containing:</p>
+<ul class="simple">
+<li><p><strong>Integrated_Transient</strong> – scalar integrals for each parameter and target node.</p></li>
+<li><p><strong>Time_Series</strong> – a <code class="xref py py-class docutils literal notranslate"><span class="pre">SensitivityData</span></code> tensor that stores the full time‑series of sensitivities.</p></li>
+<li><p><strong>Raw_Adjoint_History</strong> – raw adjoint vectors at every step (useful for fault analysis).</p></li>
+</ul>
+<section id="id1">
+<h2>Parameters<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>time_array<span class="classifier">1‑D array_like</span></dt><dd><p>Simulation time points.</p>
+</dd>
+<dt>V_forward<span class="classifier">list/array</span></dt><dd><p>Forward solution vector(s) at each time step.</p>
+</dd>
+<dt>list_of_lus<span class="classifier">list of LU objects</span></dt><dd><p>LU factorizations from the forward transient solver, one per time step.</p>
+</dd>
+<dt>dt<span class="classifier">float</span></dt><dd><p>Time step size.</p>
+</dd>
+<dt>method<span class="classifier">str, optional</span></dt><dd><p>Integration scheme used in the forward pass (<cite>“BE”</cite> = Backward Euler,
+<cite>“TR”</cite> = Trapezoidal).  The same method is used for the backward solve.</p>
+</dd>
+</dl>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>The algorithm performs a reverse‑time sweep to compute adjoint variables
+and then a forward integration to accumulate sensitivities.</p></li>
+<li><p>All parameters that are differentiable in the circuit (from
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">circuit.differentiable_params</span></code>) are included in the tensor.</p></li>
+</ul>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">AdjointEngine.compute_sensitivities(sweep_axis,</span> <span class="pre">V_forward,</span> <span class="pre">list_of_lus,</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">domain=&quot;static&quot;,</span> <span class="pre">method=&quot;TR&quot;,</span> <span class="pre">dt=0.0)</span></span></dt>
+<dd><p>Unified continuous sensitivity solver for AC, DC, OP and local‑DC (transient) analyses.
+The routine builds a <code class="xref py py-class docutils literal notranslate"><span class="pre">SensitivityData</span></code> tensor that
+contains the partial derivatives of each output node with respect to every
+differentiable parameter.</p>
+<section id="id2">
+<h2>Parameters<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>sweep_axis<span class="classifier">1‑D array_like</span></dt><dd><p>Independent variable array (time, frequency, voltage, or single value for OP).</p>
+</dd>
+<dt>V_forward<span class="classifier">list/array</span></dt><dd><p>Forward solution vectors at each sweep point.</p>
+</dd>
+<dt>list_of_lus<span class="classifier">list of LU objects</span></dt><dd><p>LU factorizations from the forward solver, one per step.</p>
+</dd>
+<dt>domain<span class="classifier">str, optional</span></dt><dd><p>One of <code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;frequency&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;voltage&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;static&quot;</span></code>.</p>
+</dd>
+<dt>method<span class="classifier">str, optional</span></dt><dd><p>Integration scheme used for transient problems (<cite>“TR”</cite> or <cite>“BE”</cite>).</p>
+</dd>
+<dt>dt<span class="classifier">float, optional</span></dt><dd><p>Time step size (used only when <code class="docutils literal notranslate"><span class="pre">domain</span> <span class="pre">==</span> <span class="pre">&quot;time&quot;</span></code>).</p>
+</dd>
+</dl>
+</section>
+<section id="id3">
+<h2>Returns<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>SensitivityData</dt><dd><p>Tensor containing all continuous sensitivities.  The object also stores the
+raw adjoint vectors in its <code class="docutils literal notranslate"><span class="pre">adjoint_vectors</span></code> attribute for later fault analysis.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<section id="example-usage">
+<h2>Example usage<a class="headerlink" href="#example-usage" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">core.circuit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Circuit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adjoint_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdjointEngine</span>
+
+<span class="c1"># Assume `circuit` has been built and a forward solution is available.</span>
+<span class="n">engine</span> <span class="o">=</span> <span class="n">AdjointEngine</span><span class="p">(</span><span class="n">circuit</span><span class="p">,</span> <span class="n">output_nodes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;out&#39;</span><span class="p">])</span>
+<span class="n">tensor</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">compute_sensitivities</span><span class="p">(</span>
+    <span class="n">sweep_axis</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span>
+    <span class="n">V_forward</span><span class="o">=</span><span class="n">forward_results</span><span class="p">,</span>
+    <span class="n">list_of_lus</span><span class="o">=</span><span class="n">luts</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="s1">&#39;time&#39;</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">&#39;TR&#39;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Adjoint Sensitivity Engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#AdjointEngine"><code class="docutils literal notranslate"><span class="pre">AdjointEngine</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#AdjointEngine._solve_adjoint"><code class="docutils literal notranslate"><span class="pre">AdjointEngine._solve_adjoint()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#AdjointEngine.compute_transient"><code class="docutils literal notranslate"><span class="pre">AdjointEngine.compute_transient()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-usage">Example usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="dc_engine.html" title="previous chapter">DC Analysis Engine</a></li>
+      <li>Next: <a href="gui.html" title="next chapter">Graphical User Interface</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/adjoint_engine.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

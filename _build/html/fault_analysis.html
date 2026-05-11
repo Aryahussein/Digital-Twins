@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Fault Analysis Utilities &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Large‑Change Sensitivity Utilities" href="large_change_sensitivity.html" />
+    <link rel="prev" title="Simulation Plotting Utilities" href="plotting.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="fault-analysis-utilities">
+<span id="fault-analysis-module"></span><h1>Fault Analysis Utilities<a class="headerlink" href="#fault-analysis-utilities" title="Link to this heading">¶</a></h1>
+<p>This module implements functions to rank component sensitivities, generate fault
+tables (shorts &amp; opens), compute resistance thresholds using large‑change
+sensitivity formulas, and pretty‑print the results.  The routines operate on a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SimulationResult</span></code> that already contains an
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SensitivityData</span></code> tensor.</p>
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="rank_component_sensitivities">
+<span class="sig-name descname"><span class="pre">rank_component_sensitivities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#rank_component_sensitivities" title="Link to this definition">¶</a></dt>
+<dd><p>Rank order component sensitivities from largest to smallest.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<p>result : <a class="reference internal" href="results.html#SimulationResult" title="SimulationResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SimulationResult</span></code></a></p>
+</section>
+<section id="returns">
+<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
+<p>list[dict] | None</p>
+<p>Prints a table of the top ten sensitivities and returns the full sorted list.</p>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="perform_global_ranking">
+<span class="sig-name descname"><span class="pre">perform_global_ranking</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">circuit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#perform_global_ranking" title="Link to this definition">¶</a></dt>
+<dd><p>Generate a fault table ranking both open and short faults for each output node
+using adjoint sensitivity data.</p>
+<section id="id1">
+<h2>Parameters<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<p>circuit : <a class="reference internal" href="circuit.html#Circuit" title="Circuit"><code class="xref py py-class docutils literal notranslate"><span class="pre">Circuit</span></code></a>
+result : <a class="reference internal" href="results.html#SimulationResult" title="SimulationResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SimulationResult</span></code></a></p>
+</section>
+<section id="id2">
+<h2>Returns<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
+<p>dict | None</p>
+<p>The dictionary keys are output nodes; each value is a list of fault dictionaries
+sorted by absolute impact.  Each fault entry contains:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">type</span></code> – <code class="docutils literal notranslate"><span class="pre">&quot;Open&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;Short&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">location</span></code> – component name or node pair</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">impact</span></code> – peak magnitude of the sensitivity waveform</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">time</span></code> – sweep step at which the impact occurs</p></li>
+</ul>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">compute_fault_thresholds(circuit,</span> <span class="pre">result,</span> <span class="pre">output_node,</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">delta_F,</span> <span class="pre">top_n=10,</span> <span class="pre">r_sweep_shorts=None,</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">r_sweep_opens=None,</span> <span class="pre">dt=None,</span> <span class="pre">method='TR')</span></span></dt>
+<dd><p>Compute fault resistance thresholds using the large‑change sensitivity
+formula.  For each of the top faults returned by
+<a class="reference internal" href="#perform_global_ranking" title="perform_global_ranking"><code class="xref py py-func docutils literal notranslate"><span class="pre">perform_global_ranking()</span></code></a>, a sweep over short/open resistances is performed.
+The smallest/​largest resistance that drives the output change beyond
+<code class="docutils literal notranslate"><span class="pre">delta_F</span></code> volts is recorded.</p>
+<section id="id3">
+<h2>Parameters<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>circuit, result, output_node, delta_F</dt><dd><p>As described above.</p>
+</dd>
+</dl>
+<p>top_n : int, optional – number of faults to process for each type.
+r_sweep_shorts, r_sweep_opens : np.ndarray, optional</p>
+<blockquote>
+<div><p>Resistance sweep arrays; defaults to a wide log‑space.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>dt<span class="classifier">float, optional</span></dt><dd><p>Time step (used for companion model conductances).</p>
+</dd>
+<dt>method<span class="classifier">str, optional</span></dt><dd><p>Integration method (‘TR’ or ‘BE’).</p>
+</dd>
+</dl>
+</section>
+<section id="id4">
+<h2>Returns<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h2>
+<p>dict</p>
+<p>The returned dictionary contains:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">shorts</span></code> – list of short fault threshold dictionaries.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opens</span></code>  – list of open fault threshold dictionaries.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">domain</span></code> – string indicating the analysis domain (time, frequency, etc.).</p></li>
+</ul>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="print_fault_table">
+<span class="sig-name descname"><span class="pre">print_fault_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">all_fault_tables</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_n</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#print_fault_table" title="Link to this definition">¶</a></dt>
+<dd><p>Pretty‑prints a ranking table for each output node.  Useful after
+<a class="reference internal" href="#perform_global_ranking" title="perform_global_ranking"><code class="xref py py-func docutils literal notranslate"><span class="pre">perform_global_ranking()</span></code></a>.</p>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="print_threshold_table">
+<span class="sig-name descname"><span class="pre">print_threshold_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold_results</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#print_threshold_table" title="Link to this definition">¶</a></dt>
+<dd><p>Pretty‑prints the threshold tables generated by
+<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_fault_thresholds()</span></code>.  It shows the worst short/open,
+voltage values, ΔV, and observation windows.</p>
+</dd></dl>
+
+<hr class="docutils" />
+<p>Example usage</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fault_analysis</span><span class="w"> </span><span class="kn">import</span> <span class="n">perform_global_ranking</span><span class="p">,</span> <span class="n">compute_fault_thresholds</span>
+<span class="n">all_faults</span> <span class="o">=</span> <span class="n">perform_global_ranking</span><span class="p">(</span><span class="n">circuit</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+<span class="n">thresholds</span> <span class="o">=</span> <span class="n">compute_fault_thresholds</span><span class="p">(</span><span class="n">circuit</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="s2">&quot;out&quot;</span><span class="p">,</span> <span class="n">delta_F</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+<span class="n">print_fault_table</span><span class="p">(</span><span class="n">all_faults</span><span class="p">)</span>
+<span class="n">print_threshold_table</span><span class="p">(</span><span class="n">thresholds</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Fault Analysis Utilities</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#rank_component_sensitivities"><code class="docutils literal notranslate"><span class="pre">rank_component_sensitivities()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#perform_global_ranking"><code class="docutils literal notranslate"><span class="pre">perform_global_ranking()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#print_fault_table"><code class="docutils literal notranslate"><span class="pre">print_fault_table()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#print_threshold_table"><code class="docutils literal notranslate"><span class="pre">print_threshold_table()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="plotting.html" title="previous chapter">Simulation Plotting Utilities</a></li>
+      <li>Next: <a href="large_change_sensitivity.html" title="next chapter">Large‑Change Sensitivity Utilities</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/fault_analysis.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

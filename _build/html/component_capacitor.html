@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Capacitor Component &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Circuit Component Base Class" href="component_base.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="capacitor-component">
+<span id="id1"></span><h1>Capacitor Component<a class="headerlink" href="#capacitor-component" title="Link to this heading">¶</a></h1>
+<p>This module implements a dynamic capacitor that participates in AC, transient,
+and adjoint sensitivity calculations.  It inherits from <code class="xref py py-class docutils literal notranslate"><span class="pre">Component</span></code>.</p>
+<hr class="docutils" />
+<dl class="py class">
+<dt class="sig sig-object py" id="Capacitor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Capacitor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#Capacitor" title="Link to this definition">¶</a></dt>
+<dd><p>Dynamic capacitor component.</p>
+<p>Inherits all attributes and abstract methods from <a class="reference internal" href="component_base.html#Component" title="Component"><code class="xref py py-class docutils literal notranslate"><span class="pre">Component</span></code></a>.
+The constructor simply forwards to the base class; the key behaviour
+is implemented in the overridden methods below.</p>
+</dd></dl>
+
+<hr class="docutils" />
+<section id="overridden-methods">
+<h2>Overridden Methods<a class="headerlink" href="#overridden-methods" title="Link to this heading">¶</a></h2>
+<hr class="docutils" />
+<p>Example Usage</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">components.capacitor</span><span class="w"> </span><span class="kn">import</span> <span class="n">Capacitor</span>
+
+<span class="n">cap</span> <span class="o">=</span> <span class="n">Capacitor</span><span class="p">(</span><span class="s1">&#39;C1&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="s1">&#39;n1&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;n2&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="mf">1e-6</span><span class="p">})</span>
+<span class="n">cap</span><span class="o">.</span><span class="n">bind_nodes</span><span class="p">(</span><span class="n">node_map</span><span class="p">)</span>
+<span class="n">cap</span><span class="o">.</span><span class="n">stamp_ac</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">sources</span><span class="p">,</span> <span class="n">w</span><span class="o">=</span><span class="mi">2</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">*</span><span class="mi">1000</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Capacitor Component</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Capacitor"><code class="docutils literal notranslate"><span class="pre">Capacitor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#overridden-methods">Overridden Methods</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="component_base.html" title="previous chapter">Circuit Component Base Class</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/component_capacitor.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

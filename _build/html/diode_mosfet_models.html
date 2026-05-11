@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Diode &amp; NMOS Level‑1 Models &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Simulation Result &amp; Sensitivity Data" href="results.html" />
+    <link rel="prev" title="Thermal Voltage Helper" href="thermal_constants.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="diode-nmos-level1-models">
+<span id="diode-and-nmos-models"></span><h1>Diode &amp; NMOS Level‑1 Models<a class="headerlink" href="#diode-nmos-level1-models" title="Link to this heading">¶</a></h1>
+<p>This module implements two small‑signal models that are useful in SPICE‑style circuit simulation:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#evaluate_diode" title="evaluate_diode"><code class="xref py py-func docutils literal notranslate"><span class="pre">evaluate_diode()</span></code></a> – Shockley diode model with sensitivity to the saturation current.</p></li>
+<li><p><a class="reference internal" href="#evaluate_nmos" title="evaluate_nmos"><code class="xref py py-func docutils literal notranslate"><span class="pre">evaluate_nmos()</span></code></a> – Level 1 MOSFET (NMOS) model including gradients for <em>V&lt;sub&gt;TO&lt;/sub&gt;</em> and <em>β&lt;sub&gt;n&lt;/sub&gt;</em>.</p></li>
+</ul>
+<p>The functions return dictionaries containing the large‑signal quantities as well as the required small‑signal conductances and sensitivity gradients.</p>
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="evaluate_diode">
+<span class="sig-name descname"><span class="pre">evaluate_diode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Is</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Vt</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#evaluate_diode" title="Link to this definition">¶</a></dt>
+<dd><p>Evaluates the Shockley diode model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>vd</strong> (<em>float</em>) – Voltage across the diode (Anode – Cathode).</p></li>
+<li><p><strong>Is</strong> (<em>float</em>) – Saturation current (e.g., 1e‑14 A).</p></li>
+<li><p><strong>Vt</strong> (<em>float</em>) – Thermal voltage (e.g., 0.02585 V).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><p><code class="docutils literal notranslate"><span class="pre">dict</span></code> with keys:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;I_D&quot;</span></code> – Large‑signal current in amperes.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;gd&quot;</span></code>   – Small‑signal conductance dI/dv (siemens).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;dId_dIs&quot;</span></code>
+– Sensitivity gradient ∂I/∂Is.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="evaluate_nmos">
+<span class="sig-name descname"><span class="pre">evaluate_nmos</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vgs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">VTO</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Bn</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#evaluate_nmos" title="Link to this definition">¶</a></dt>
+<dd><p>Evaluates the Level 1 NMOS model with sensitivity gradients.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>vgs</strong> (<em>float</em>) – Gate‑source voltage.</p></li>
+<li><p><strong>vds</strong> (<em>float</em>) – Drain‑source voltage.</p></li>
+<li><p><strong>VTO</strong> (<em>float</em>) – Threshold voltage (V&lt;sub&gt;TO&lt;/sub&gt;).</p></li>
+<li><p><strong>Bn</strong> (<em>float</em>) – Transconductance parameter β&lt;sub&gt;n&lt;/sub&gt; = μₙC&lt;sub&gt;ox&lt;/sub&gt;(W/L).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><p><code class="docutils literal notranslate"><span class="pre">dict</span></code> with keys:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;I_D&quot;</span></code>   – Drain current (A).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;gm&quot;</span></code>    – Transconductance dI/dV&lt;sub&gt;GS&lt;/sub&gt;.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;gds&quot;</span></code>   – Output conductance dI/dV&lt;sub&gt;DS&lt;/sub&gt;.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;dId_dBn&quot;</span></code>
+– Sensitivity ∂I/∂β&lt;sub&gt;n&lt;/sub&gt;.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;dId_dVTO&quot;</span></code>
+– Sensitivity ∂I/∂V&lt;sub&gt;TO&lt;/sub&gt;.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Diode &amp; NMOS Level‑1 Models</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#evaluate_diode"><code class="docutils literal notranslate"><span class="pre">evaluate_diode()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#evaluate_nmos"><code class="docutils literal notranslate"><span class="pre">evaluate_nmos()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="thermal_constants.html" title="previous chapter">Thermal Voltage Helper</a></li>
+      <li>Next: <a href="results.html" title="next chapter">Simulation Result &amp; Sensitivity Data</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/diode_mosfet_models.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
