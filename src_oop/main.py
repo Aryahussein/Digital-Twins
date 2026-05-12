@@ -116,6 +116,14 @@ if __name__ == "__main__":
     # Set to an integer (e.g., 50) to evaluate a specific step, or None for Auto
     user_eval_step = None
 
+    number_of_large_change_params = 1 # Number of parameters to sweep in large change analysis
+
+    factory_tol = 0.05            # Components vary by ±5%
+    manufacturing_sigma = 6       # Factory is a 6-Sigma process
+
+    output_spec = 0.05             # Output voltage must stay within ±5%
+    output_sigma_req = 6          # We demand a 6-Sigma yield from the circuit
+
     # =========================================================================
     # 2. EXECUTION CORE
     # =========================================================================
@@ -215,13 +223,15 @@ if __name__ == "__main__":
     if yield_analysis:
         print("\n=== EXECUTING YIELD ANALYSIS ===")
         perform_sdwc_yield_analysis(
-            circuit=circuit,
-            result=result,
-            target_node=target_node,
+            circuit=circuit, 
+            result=result, 
+            target_node="out", 
             calculated_params=calculated_params,
-            netlist_name=netlist,
+            netlist_name="CMOS_Inverter", 
             folder_map=folder_map,
-            user_eval_step=user_eval_step, 
-            factory_tolerance=0.05,
-            k_params=4
+            factory_tolerance=factory_tol,
+            sigma_level=manufacturing_sigma,
+            out_spec=output_spec,
+            out_sigma_level=output_sigma_req,
+            k_params=number_of_large_change_params
         )

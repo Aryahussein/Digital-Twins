@@ -800,138 +800,151 @@ def plot_worst_case_corners(lc_data, target_node, spec_min, spec_max, tolerance_
     fig.savefig(os.path.join(folder, f"{name}.png"), dpi=600)
     plt.close()
 
-def plot_combined_yield_pdf(
-    mean_out, 
-    sigma_out, 
-    lc_results,      # The Woodbury Large Change results
-    alpha_sweep,     # The array of alphas used in Woodbury (e.g., -0.2 to 0.2)
-    target_node, 
-    spec_min, 
-    spec_max, 
-    factory_tolerance, 
-    folder="../figures/yield", 
-    name="combined_yield",
-    step_idx=-1
-):
-    """
-    Plots the Analytical Probability Density Function (PDF) overlaid with 
-    the true non-linear Woodbury worst-case corners.
-    """
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    # ==========================================
-    # 1. Plot the Analytical Bell Curve
-    # ==========================================
-    # Generate X values spanning +/- 4 sigma around the mean
-    x_axis = np.linspace(mean_out - 4*sigma_out, mean_out + 4*sigma_out, 1000)
-    pdf = norm.pdf(x_axis, loc=mean_out, scale=sigma_out)
-
-    ax.plot(x_axis, pdf, color='blue', linewidth=2, label="Analytical PDF (Linear Assumption)")
-    
-    # Shade the "Passing" region under the bell curve
-    fill_x = x_axis[(x_axis >= spec_min) & (x_axis <= spec_max)]
-    fill_y = norm.pdf(fill_x, loc=mean_out, scale=sigma_out)
-    ax.fill_between(fill_x, fill_y, color='green', alpha=0.2, label="Passing Yield Zone")
-    
-    # Shade the "Failing" tails in red
-    fail_left_x = x_axis[x_axis < spec_min]
-    ax.fill_between(fail_left_x, norm.pdf(fail_left_x, loc=mean_out, scale=sigma_out), color='red', alpha=0.3)
-    fail_right_x = x_axis[x_axis > spec_max]
-    ax.fill_between(fail_right_x, norm.pdf(fail_right_x, loc=mean_out, scale=sigma_out), color='red', alpha=0.3)
-
-    # ==========================================
-    # 2. Extract & Plot the True Woodbury Corners
-    # ==========================================
-    # Find the indices in the alpha array that closest match the factory tolerance (+/-)
-    idx_slow = np.argmin(np.abs(alpha_sweep - factory_tolerance))
-    idx_fast = np.argmin(np.abs(alpha_sweep + factory_tolerance))
-    
-    # Extract the exact Woodbury voltages using the elegant LargeChangeData API!
-    # No need to touch node_maps or matrix indices manually.
-    v_woodbury_slow = lc_results(target_node, var_idx=idx_slow, step_idx=step_idx)
-    v_woodbury_fast = lc_results(target_node, var_idx=idx_fast, step_idx=step_idx)
-    
-    # For AC analysis, ensure we plot the absolute magnitude of the complex phasor
-    v_woodbury_slow = np.abs(v_woodbury_slow)
-    v_woodbury_fast = np.abs(v_woodbury_fast)
-
-    # Plot Woodbury truth points as vertical dashed lines on the PDF
-    ax.axvline(v_woodbury_slow, color='purple', linestyle='--', linewidth=2, 
-               label=f"Woodbury Exact (+{factory_tolerance*100}%)")
-    ax.axvline(v_woodbury_fast, color='orange', linestyle='--', linewidth=2, 
-               label=f"Woodbury Exact (-{factory_tolerance*100}%)")
-
-    # ==========================================
-    # 3. Aesthetics & Specifications
-    # ==========================================
-    ax.axvline(spec_min, color='darkred', linestyle='-', linewidth=2, label="Spec Min")
-    ax.axvline(spec_max, color='darkred', linestyle='-', linewidth=2, label="Spec Max")
-    ax.axvline(mean_out, color='black', linestyle=':', linewidth=1.5, label="Nominal Mean")
-
-    ax.set_title(f"Statistical Reality Check: V({target_node})", fontsize=14, fontweight='bold')
-    ax.set_xlabel("Output Voltage [V]", fontsize=12)
-    ax.set_ylabel("Probability Density", fontsize=12)
-    ax.legend(loc='upper right', framealpha=0.9)
-    ax.grid(True, linestyle='--', alpha=0.6)
-
+def plot_transient_envelope(base_result, lc_results, target_node, evaluation_steps_dict, folder, name):
+    """Plots the min/max envelope and marks ALL identified evaluation metrics."""
     import os
     os.makedirs(folder, exist_ok=True)
-    filepath = f"{folder}/{name}.png"
-    plt.tight_layout()
-    plt.savefig(filepath, dpi=300)
-    plt.close()
-    print(f"Combined PDF plot saved to {filepath}")
-
-def plot_transient_envelope(base_result, lc_results, target_node, eval_step, spec_min, spec_max, folder, name):
-    """Helper function to plot the min/max transient envelope."""
-    import os
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-
-    t_axis = base_result.sweep_axis * 1e9  # Convert to ns
+    t_axis = base_result.sweep_axis * 1e9  
     n_idx = base_result.node_map[target_node]
     
-    # Extract nominal waveform
     v_nominal = base_result.VI[:, n_idx]
-    
-    # Extract min and max bounds from the Large Change Woodbury sweep
     all_waveforms = lc_results.data[:, :, n_idx]
     v_min = np.min(all_waveforms, axis=0)
     v_max = np.max(all_waveforms, axis=0)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Plot the envelope ribbon
-    ax.fill_between(t_axis, v_min, v_max, color='red', alpha=0.2, label='Worst-Case Spread (±20%)')
-    
-    # Plot the nominal line
+    print(f"\n--- [DEBUG] MASTER ENVELOPE PLOTTER ---")
+    for step, labels in evaluation_steps_dict.items():
+        print(f"At Step {step} (t={t_axis[step]:.2f}ns):")
+        print(f"  Nominal Voltage: {v_nominal[step]:.4f} V")
+        print(f"  Envelope MAX:    {v_max[step]:.4f} V")
+        print(f"  Envelope MIN:    {v_min[step]:.4f} V")
+        print(f"  VERTICAL SPREAD: {(v_max[step] - v_min[step])*1000:.2f} mV")
+    print(f"---------------------------------------\n")
+    # ===================================
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.fill_between(t_axis, v_min, v_max, color='red', alpha=0.2, label='Woodbury Physical Envelope (± Tol)')
     ax.plot(t_axis, v_nominal, color='black', linewidth=2, label='Nominal Waveform')
 
-    # Mark the evaluation point and thresholds
-    t_eval = t_axis[eval_step]
-    ax.axvline(t_eval, color='blue', linestyle='--', alpha=0.7, label=f'Eval Point (t={t_eval:.2f}ns)')
-    
-    # Plot the 3-Sigma Spec Window limits
-    ax.axhline(spec_max, color='green', linestyle=':', linewidth=2, label=f'Upper Spec Limit ({spec_max:.3f}V)')
-    ax.axhline(spec_min, color='green', linestyle=':', linewidth=2, label=f'Lower Spec Limit ({spec_min:.3f}V)')
+    # Draw a vertical line for every unique step identified by our metrics
+    colors = ['blue', 'purple', 'orange']
+    for i, (step, labels) in enumerate(evaluation_steps_dict.items()):
+        t_eval = t_axis[step]
+        label_str = "+".join([lbl.split('_')[0] for lbl in labels]) # Just print M1+M2, etc.
+        ax.axvline(t_eval, color=colors[i % len(colors)], linestyle='--', linewidth=2, 
+                   label=f'{label_str} Eval Point (t={t_eval:.2f}ns)')
+        
+        # Plot markers on the envelope bounds at these specific points
+        ax.plot(t_eval, v_max[step], 'X', color=colors[i % len(colors)], markersize=8)
+        ax.plot(t_eval, v_min[step], 'X', color=colors[i % len(colors)], markersize=8)
 
-    # Look for constraint violations at the evaluation point
-    spread_min_at_eval = v_min[eval_step]
-    spread_max_at_eval = v_max[eval_step]
-    
-    if spread_max_at_eval > spec_max or spread_min_at_eval < spec_min:
-        ax.plot(t_eval, spread_max_at_eval if spread_max_at_eval > spec_max else spread_min_at_eval, 
-                'rX', markersize=12, label='Threshold Violation')
-        plt.title(f"Yield Failure Detected!\nSpread exceeds limits at Evaluation Point", color='red', fontweight='bold')
-    else:
-        plt.title(f"Yield Pass\n±20% sweep remains within bounds", color='green', fontweight='bold')
-
+    ax.set_title(f"Master Yield Envelope at {target_node}", fontweight='bold')
     ax.set_xlabel("Time (ns)", fontweight='bold')
-    ax.set_ylabel(f"Voltage at {target_node} (V)", fontweight='bold')
+    ax.set_ylabel(f"Voltage (V)", fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend(loc='best')
-    
     plt.tight_layout()
     plt.savefig(f"{folder}/{name}.png", dpi=300)
     plt.close()
-    print(f"Transient envelope plot saved to {folder}/{name}.png")
+
+def plot_combined_yield_pdf(mean_out, sigma_out, spec_min, spec_max, target_node, step_idx, folder, name):
+    """Visual A: The pure Gaussian PDF showing true Variance against the specs."""
+    os.makedirs(folder, exist_ok=True)
+    x_axis = np.linspace(mean_out - 6*sigma_out, mean_out + 6*sigma_out, 1000)
+    pdf_values = norm.pdf(x_axis, mean_out, sigma_out)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(x_axis, pdf_values, color='black', linewidth=2, label=f'Woodbury PDF (σ = {sigma_out*1000:.2f}mV)')
+    
+    pass_region = (x_axis >= spec_min) & (x_axis <= spec_max)
+    plt.fill_between(x_axis, pdf_values, where=pass_region, color='green', alpha=0.2, label='Passing Yield')
+
+    fail_low, fail_high = (x_axis < spec_min), (x_axis > spec_max)
+    plt.fill_between(x_axis, pdf_values, where=fail_low, color='red', alpha=0.4, label='Failure (Out of Spec)')
+    plt.fill_between(x_axis, pdf_values, where=fail_high, color='red', alpha=0.4)
+
+    plt.axvline(spec_min, color='red', linestyle='--', linewidth=2)
+    plt.axvline(spec_max, color='red', linestyle='--', linewidth=2)
+    plt.axvline(mean_out, color='black', linestyle=':', linewidth=1.5)
+
+    prob_passing = norm.cdf(spec_max, mean_out, sigma_out) - norm.cdf(spec_min, mean_out, sigma_out)
+    
+    plt.title(f'Rigorous Yield Distribution at Node {target_node}\nYield: {prob_passing*100:.6f}% | DPMO: {(1-prob_passing)*1e6:.1f}', fontweight='bold')
+    plt.xlabel('Voltage (V)', fontweight='bold')
+    plt.ylabel('Probability Density', fontweight='bold')
+    plt.grid(True, alpha=0.3)
+    plt.legend(loc='upper right')
+    plt.tight_layout()
+    plt.savefig(f"{folder}/{name}.png", dpi=300)
+    plt.close()
+
+def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, step_idx, folder, name, combined_adjoint_mv=None, combined_woodbury_mv=None):
+    """
+    Plots a unified grouped bar chart. 
+    Shows Adjoint estimations for ALL parameters, and Woodbury truths for the top K.
+    """
+    os.makedirs(folder, exist_ok=True)
+
+    # 1. Filter out zero-impact noise and reverse for plotting (largest at top)
+    clean_data = [d for d in step_specific_ranking if d['dv_expected'] > 1e-9]
+    clean_data.reverse()
+
+    params = [d['param'] for d in clean_data]
+    adj_vals = [d['dv_expected'] * 1000 for d in clean_data] # Adjoint in mV
+    
+    # 2. Extract Woodbury values (Assign 0.0 if Woodbury wasn't run on this parameter)
+    wb_vals = []
+    for p in params:
+        if p in woodbury_deltas:
+            wb_vals.append(np.abs(woodbury_deltas[p]) * 1000)
+        else:
+            wb_vals.append(0.0)
+
+    if combined_woodbury_mv is not None and combined_woodbury_mv > 0:
+        params.append("COMBINED CORNERS (5% Tol)")
+        adj_vals.append(combined_adjoint_mv)
+        wb_vals.append(combined_woodbury_mv)
+
+    # 3. Dynamic Height & Grouped Bar Setup
+    dynamic_height = max(6, len(params) * 0.5)
+    fig, ax = plt.subplots(figsize=(11, dynamic_height))
+    
+    y = np.arange(len(params))
+    height = 0.4 
+
+    # Plot Adjoint slightly above center, Woodbury slightly below center
+    rects1 = ax.barh(y + height/2, adj_vals, height, label='Adjoint Prediction (Linear)', color='lightblue', edgecolor='black')
+    rects2 = ax.barh(y - height/2, wb_vals, height, label='Woodbury Truth (Non-Linear)', color='coral', edgecolor='black')
+
+    # 4. Formatting and Labels
+    ax.set_yticks(y)
+    ax.set_yticklabels(params, fontweight='bold')
+    ax.set_xlabel('Absolute Output Voltage Shift (mV) per 1σ Variation', fontsize=11, fontweight='bold')
+    ax.set_title(f'Unified Sensitivity Ranking: V({target_node}) at Step {step_idx}', fontsize=12, fontweight='bold', pad=15)
+    ax.grid(axis='x', linestyle='--', alpha=0.6)
+    
+    # Place legend out of the way
+    ax.legend(loc='lower right', framealpha=0.9)
+
+    # 5. Add text labels (but skip Woodbury text if it is 0.0)
+    max_val = max(max(adj_vals), max(wb_vals))
+    
+    for rect in rects1:
+        width = rect.get_width()
+        ax.text(width + (max_val * 0.01), rect.get_y() + rect.get_height()/2, 
+                f'{width:.2f} mV', va='center', fontweight='bold', color='black', fontsize=9)
+
+    for rect in rects2:
+        width = rect.get_width()
+        if width > 0.0:  # Only label the bars that actually exist!
+            ax.text(width + (max_val * 0.01), rect.get_y() + rect.get_height()/2, 
+                    f'{width:.2f} mV', va='center', fontweight='bold', color='darkred', fontsize=9)
+
+    # Buffer on the right so text isn't cut off
+    ax.set_xlim(0, max_val * 1.15)
+
+    plt.tight_layout()
+    filepath = os.path.join(folder, f"{name}.png")
+    plt.savefig(filepath, dpi=300)
+    plt.close()
+    print(f"Saved Unified Pareto Chart to: {filepath}")
