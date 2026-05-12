@@ -127,9 +127,10 @@ class LargeChangeEngine:
         lc_data = LargeChangeData(variation_axis, result.sweep_axis, result.node_map)
         
         domain = getattr(result, 'domain')
-        dt = getattr(result, 'step')
+        # dt = getattr(result, 'step')
+        global_dt = getattr(result, 'step')
 
-        print(dt)
+        # print(dt)
 
         # 1. Cache pristine parameters safely
         original_values = {
@@ -152,6 +153,10 @@ class LargeChangeEngine:
             self.circuit.clear_cache()
             v_prev_variation = np.zeros(self.circuit.total_dim)
 
+            if domain == "time":
+                for comp in self.circuit._tran_comps:
+                    comp.prev_current = 0.0
+
             # B. Sweep through the simulation steps (Time or Frequency)
             for step_idx in range(len(result.sweep_axis)):
                 V_baseline = result.VI[step_idx]
@@ -159,6 +164,10 @@ class LargeChangeEngine:
                 
                 t = result.sweep_axis[step_idx] if domain == "time" else 0.0
                 w = 2 * np.pi * result.sweep_axis[step_idx] if domain == "frequency" else 0.0
+
+                current_dt = 0.0
+                if domain == "time" and step_idx > 0:
+                    current_dt = global_dt
 
                 # WOODBURY STRATEGY: Initialize with precomputed PQ topologies
                 # We pass the exact dp vector for this variation to the strategy
@@ -173,9 +182,13 @@ class LargeChangeEngine:
                 # Injects the Woodbury Strategy into the core Newton-Raphson loop.
                 # Linear circuits converge in exactly 1 iteration.
                 _, v_converged = nl_solver.solve(
-                    v_ini=V_baseline, domain=domain, t=t, dt=dt, v_prev=v_prev,
+                    v_ini=V_baseline, domain=domain, t=t, dt=current_dt, v_prev=v_prev,
                     method=method, strategy=woodbury_strategy 
                 )
+
+                if domain == "time" and current_dt > 0:
+                    for comp in self.circuit._tran_comps:
+                        comp.update_transient_state(v_converged, v_prev, current_dt, method)
                 
                 lc_data.data[v_idx, step_idx, :] = v_converged
                 v_prev_variation = v_converged.copy()

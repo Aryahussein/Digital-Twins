@@ -151,13 +151,19 @@ class Diode(Component):
             Q[k, col_idx] = -1.0
 
     def get_delta_y(self, param_name, dp, V_nom=None, V_k=None, **kwargs):
-        """Calculates Woodbury Admittance shifts exactly per the slides."""
-        # 1. Evaluate baseline dynamic conductance
-        res_nom = self.evaluate_physics(v_k=V_nom)
-        gd_nom = res_nom.get("gd", 0.0)
+        """
+        Calculates exact Woodbury admittance shifts per the slides.
+        Bypasses double-counting by using the DRY 'time-travel' trick.
+        """
+        # 1. New State (Evaluated at current NR guess V_k, with NEW parameter)
+        # The engine already shifted the component, so dp=0.0 is the new reality.
+        res_new = self.evaluate_physics(v_k=V_k, param_name=param_name, dp=0.0, **kwargs)
+        G_new = res_new["gd"]
         
-        # 2. Evaluate shifted dynamic conductance at current NR guess
-        res_new = self.evaluate_physics(v_k=V_k, param_name=param_name, dp=dp)
-        gd_new = res_new.get("gd", 0.0)
+        # 2. Old State (Evaluated at converged baseline V_nom, with OLD parameter)
+        # We peek back at the original unshifted component by subtracting dp.
+        res_old = self.evaluate_physics(v_k=V_nom, param_name=param_name, dp=-dp, **kwargs)
+        G_old = res_old["gd"]
         
-        return gd_new - gd_nom
+        # 3. The exact mathematical difference
+        return G_new - G_old

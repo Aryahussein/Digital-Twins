@@ -99,10 +99,26 @@ class Capacitor(Component):
         if j is not None: J_hist[j] -= I_eq
 
     def get_delta_y(self, param_name, dp, domain="time", w=0.0, dt=0.0, method="TR", **kwargs):
-        """Calculates Woodbury Admittance shift."""
-        # For linear components, Delta Y is exactly the admittance evaluated at dp!
-        res = self.evaluate_physics(domain=domain, w=w, dt=dt, method=method, dp=dp)
-        return res["g_eq"]
+        """
+        Calculates exact Woodbury admittance shift using the DRY principle.
+        Relies entirely on evaluate_physics to ensure math formulas are never duplicated.
+        """
+        # 1. Evaluate Admittance at the NEW physical reality 
+        # (self.value was already shifted by the Engine, so we add 0.0)
+        res_new = self.evaluate_physics(
+            domain=domain, w=w, dt=dt, method=method, dp=0.0, **kwargs
+        )
+        G_new = res_new["g_eq"]
+
+        # 2. Evaluate Admittance at the OLD physical reality
+        # (We peek back in time by subtracting the delta parameter)
+        res_old = self.evaluate_physics(
+            domain=domain, w=w, dt=dt, method=method, dp=-dp, **kwargs
+        )
+        G_old = res_old["g_eq"]
+
+        # 3. The true mathematical shift is the exact difference
+        return G_new - G_old
 
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates exact sensitivities w.r.t Capacitance (C)."""
