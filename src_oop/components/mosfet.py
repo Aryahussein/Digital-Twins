@@ -8,6 +8,7 @@ class Mosfet(Component):
 
     POLARITY: float
     IS_NONLINEAR = True
+    rank = 2
 
     def __init__(self, name, data_dict):
         super().__init__(name, data_dict)
@@ -30,7 +31,6 @@ class Mosfet(Component):
         if not hasattr(self, "KP"):
             if hasattr(self, "MU") and hasattr(self, "COX"):
                 self.KP = self.MU * self.COX
-
 
         missing_params = []
         for req_param in ["W", "L", "VTO", "KP"]:
@@ -75,7 +75,7 @@ class Mosfet(Component):
             if attr_name in self._diff_attrs:
                 setattr(self, attr_name, new_val)
                 
-                # NEW: Dynamically recalculate KP if MU or COX was swept!
+                # Dynamically recalculate KP if MU or COX was swept
                 if attr_name in ["MU", "COX"] and hasattr(self, "MU") and hasattr(self, "COX"):
                     self.KP = self.MU * self.COX
                 
@@ -93,10 +93,11 @@ class Mosfet(Component):
     # ==========================================
     # 1. THE PHYSICS EVALUATOR
     # ==========================================
-    def evaluate_physics(self, domain="static", t=0.0, dt=0.0, w=0.0, v_prev=None, v_k=None, method="TR", param_name=None, dp=0.0, **kwargs):
-        """Pure mathematical evaluation. Packs all data into a single generic dictionary."""
+    def evaluate_physics(self, v_k=None, overrides=None, **kwargs):
+        """Pure mathematical evaluation using absolute overrides."""
         res = {}
         if v_k is None: return res
+        overrides = overrides or {}
             
         # 1. Extract Voltages
         vd = v_k[self.idx_d] if self.idx_d is not None else 0.0
@@ -106,37 +107,32 @@ class Mosfet(Component):
         vgs = self.POLARITY * (vg - vs)
         vds = self.POLARITY * (vd - vs)
 
-        # 2. Dynamic Parameter Setup
-        vto, w_val, l_val, kp_val = self.VTO, self.W, self.L, self.KP
-        mu_val = getattr(self, "MU", 0.0)
-        cox_val = getattr(self, "COX", 0.0)
+        # 2. PURE PHYSICS: Use overrides if they exist, otherwise use nominal
+        eff_vto = overrides.get(f"{self.name}_VTO", self.VTO)
+        eff_w = overrides.get(f"{self.name}_W", self.W)
+        eff_l = overrides.get(f"{self.name}_L", self.L)
         
-        # Apply the Woodbury perturbation dynamically
-        if param_name and dp != 0.0:
-            prefix = f"{self.name}_"
-            if param_name.startswith(prefix):
-                attr = param_name[len(prefix):]
-                if attr == "VTO": vto += dp
-                elif attr == "W": w_val += dp
-                elif attr == "L": l_val += dp
-                elif attr == "KP": kp_val += dp
-                elif attr == "MU": 
-                    mu_val += dp
-                    kp_val = mu_val * cox_val # Re-derive KP
-                elif attr == "COX":
-                    cox_val += dp
-                    kp_val = mu_val * cox_val # Re-derive KP
+        eff_mu = overrides.get(f"{self.name}_MU", getattr(self, "MU", 0.0))
+        eff_cox = overrides.get(f"{self.name}_COX", getattr(self, "COX", 0.0))
+
+        # Clean override logic for the KP vs (MU*COX) relationship
+        if f"{self.name}_KP" in overrides:
+            eff_kp = overrides[f"{self.name}_KP"]
+        elif f"{self.name}_MU" in overrides or f"{self.name}_COX" in overrides:
+            eff_kp = eff_mu * eff_cox
+        else:
+            eff_kp = self.KP
             
-        bn = (w_val / l_val) * kp_val
+        bn = (eff_w / eff_l) * eff_kp
 
         # 3. Core Physics Evaluation
-        phys_res = models.evaluate_nmos(vgs, vds, vto, bn)
+        phys_res = models.evaluate_nmos(vgs, vds, eff_vto, bn)
         Id, gm, gds = phys_res["I_D"], phys_res["gm"], phys_res["gds"]
         
         # 4. Pack data for the generic Stampers
         res["gm"] = gm
         res["gds"] = gds
-        res["ieq"] = (Id - gm * vgs - gds * vds) * self.POLARITY
+        res["I_eq"] = (Id - gm * vgs - gds * vds) * self.POLARITY
         
         # 5. Pack data for Sensitivity/Adjoint engines
         res["dId_dBn"] = phys_res["dId_dBn"]
@@ -145,7 +141,7 @@ class Mosfet(Component):
         return res
 
     # ==========================================
-    # 2. THE STAMPERS (Generic Interface)
+    # 2. THE STAMPERS (Custom 3-Terminal Interface)
     # ==========================================
     def stamp_matrix(self, Y, res, *args):
         """Stamps Jacobians (gm, gds) into the matrix."""
@@ -164,15 +160,20 @@ class Mosfet(Component):
             if g is not None: Y[s, g] -= gm
             if d is not None: Y[s, d] -= gds
 
+
     def stamp_rhs(self, J, res, *args):
-        """Stamps the Equivalent Current into the RHS vector."""
-        if "ieq" not in res: return
+        """Stamps the Equivalent Current into the RHS vector.
         
-        ieq = res["ieq"]
+        Perfectly matches the unified MNA convention:
+        Current leaving the Drain (-) and entering the Source (+).
+        """
+        I_eq = res.get("I_eq", 0.0)
+        if I_eq == 0.0: return
+        
         d, s = self.idx_d, self.idx_s
 
-        if d is not None: J[d] -= ieq
-        if s is not None: J[s] += ieq
+        if d is not None: J[d] -= I_eq
+        if s is not None: J[s] += I_eq
 
     # ==========================================
     # SENSITIVITY ENGINES (Adjoint & Woodbury)
@@ -190,7 +191,6 @@ class Mosfet(Component):
         dId_dVTO = res["dId_dVTO"]
 
         # The Chain Rule Map: How does changing a parameter affect Bn?
-        # partial Bn / partial X
         chain_rules = {
             "W": self.KP / self.L,
             "L": -self.W * self.KP / (self.L**2),
@@ -201,15 +201,13 @@ class Mosfet(Component):
 
         sens_dict = {}
         
-        # Dynamically loop through whatever parameters the object has loaded
         for attr in self._diff_attrs:
             if not hasattr(self, attr):
-                continue # Skip if the user didn't define this in the netlist
+                continue 
                 
             if attr == "VTO":
                 sens_val = adj_factor * dId_dVTO
             else:
-                # Chain rule: (dId/dBn) * (dBn/dAttr)
                 dBn_dAttr = chain_rules.get(attr, 0.0)
                 sens_val = adj_factor * dId_dBn * dBn_dAttr
                 
@@ -217,40 +215,60 @@ class Mosfet(Component):
 
         return sens_dict
 
-    def stamp_PQ(self, P, Q, col_idx):
-        """Stamps the MOSFET linearized topology (VCCS equivalent).
-        
-        Current Injection (P): Drain to Source.
-        Voltage Extraction (Q): Gate to Source.
+
+    def stamp_PQ(self, P, Q, start_col_idx):
+        """Stamps the Rank-2 MOSFET linearized topology.
+        Column 1: gm (Measures VGS, Injects IDS)
+        Column 2: gds (Measures VDS, Injects IDS)
         """
         d, g, s = self.idx_d, self.idx_g, self.idx_s
+        col_gm = start_col_idx
+        col_gds = start_col_idx + 1
         
-        # P: Current injection (Drain +, Source -) adjusted by POLARITY
-        if d is not None: P[d, col_idx] = 1.0 * self.POLARITY
-        if s is not None: P[s, col_idx] = -1.0 * self.POLARITY
-        
-        # Q: Control voltage measurement (Gate +, Source -) adjusted by POLARITY
-        if g is not None: Q[g, col_idx] = 1.0 * self.POLARITY
-        if s is not None: Q[s, col_idx] = -1.0 * self.POLARITY
+        # --- Column 1: Transconductance (gm) ---
+        if d is not None: P[d, col_gm] = 1.0 * self.POLARITY
+        if s is not None: P[s, col_gm] = -1.0 * self.POLARITY
+        if g is not None: Q[g, col_gm] = 1.0 * self.POLARITY
+        if s is not None: Q[s, col_gm] = -1.0 * self.POLARITY
 
-    def get_delta_y(self, param_name, dp, V_nom=None, V_k=None, **kwargs):
-        """
-        Calculates exact Woodbury admittance shifts per the slides.
-        Bypasses double-counting by using the DRY 'time-travel' trick.
-        """
-        # 1. New State (Evaluated at current NR guess V_k, with NEW parameter)
-        # The engine already shifted the component, so dp=0.0 is the new reality.
-        res_new = self.evaluate_physics(v_k=V_k, param_name=param_name, dp=0.0, **kwargs)
-        G_new = res_new["gm"]
-        
-        # 2. Old State (Evaluated at converged baseline V_nom, with OLD parameter)
-        # We peek back at the original unshifted component by subtracting dp.
-        res_old = self.evaluate_physics(v_k=V_nom, param_name=param_name, dp=-dp, **kwargs)
-        G_old = res_old["gm"]
-        
-        # 3. The exact mathematical difference
-        return G_new - G_old
+        # --- Column 2: Output Conductance (gds) ---
+        if d is not None: P[d, col_gds] = 1.0 * self.POLARITY
+        if s is not None: P[s, col_gds] = -1.0 * self.POLARITY
+        if d is not None: Q[d, col_gds] = 1.0 * self.POLARITY
+        if s is not None: Q[s, col_gds] = -1.0 * self.POLARITY
 
+
+    def get_delta_y(self, shifts=None, V_nom=None, V_k=None, **kwargs):
+        """Returns a 2x2 block matrix containing both gm and gds shifts."""
+        import numpy as np
+        shifts = shifts or {}
+        
+        if not shifts and V_nom is not None and np.allclose(V_nom, V_k):
+            return np.zeros((2, 2))
+
+        # TRANSLATION LAYER: Convert shifts (deltas) into absolute overrides
+        new_overrides = {}
+        old_overrides = {}
+        for param_name, delta in shifts.items():
+            nom_val = self.get_nominal_value(param_name)
+            new_overrides[param_name] = nom_val
+            old_overrides[param_name] = nom_val - delta
+
+        # 1. New State (Absolute Parameters)
+        res_new = self.evaluate_physics(v_k=V_k, overrides=new_overrides, **kwargs)
+        
+        # 2. Old State (Absolute Parameters)
+        res_old = self.evaluate_physics(v_k=V_nom, overrides=old_overrides, **kwargs)
+        
+        # 3. Extract the dual mathematical differences
+        d_gm = res_new.get("gm", 0.0) - res_old.get("gm", 0.0)
+        d_gds = res_new.get("gds", 0.0) - res_old.get("gds", 0.0)
+        
+        # Return as a 2x2 diagonal block
+        return np.array([
+            [d_gm, 0.0],
+            [0.0, d_gds]
+        ])
 
 # --- The Sibling Subclasses ---
 

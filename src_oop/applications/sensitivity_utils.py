@@ -181,12 +181,12 @@ def calculate_large_change_yield(circuit, base_result, target_node, step_idx, to
         v_shifted = np.real(lc_result(target_node, var_idx=0, step_idx=step_idx))
         actual_delta_Vs[i] = v_shifted - v_nom
         woodbury_deltas[param] = actual_delta_Vs[i]
-        # ===== INJECT THIS DEBUG BLOCK =====
-        print(f"  [DEBUG Woodbury Jump - {param}]")
-        print(f"    Nominal V: {v_nom:.6f} V")
-        print(f"    Shifted V: {v_shifted:.6f} V")
-        print(f"    Delta V:   {actual_delta_Vs[i]*1000:.2f} mV")
-        # ===================================
+        # # ===== INJECT THIS DEBUG BLOCK =====
+        # print(f"  [DEBUG Woodbury Jump - {param}]")
+        # print(f"    Nominal V: {v_nom:.6f} V")
+        # print(f"    Shifted V: {v_shifted:.6f} V")
+        # print(f"    Delta V:   {actual_delta_Vs[i]*1000:.2f} mV")
+        # # ===================================
         
         print(f"  {param:<10}: +1\u03c3 \u0394V = {actual_delta_Vs[i]:+.4e} V")
 

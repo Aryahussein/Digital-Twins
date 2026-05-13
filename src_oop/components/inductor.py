@@ -6,6 +6,10 @@ class Inductor(Component):
     IS_DYNAMIC = True
     IS_AC_REACTIVE = True
     REQUIRES_BRANCH_EQ = True
+    
+    # Base class Woodbury targets:
+    SHIFT_KEY = "req"
+    SHIFT_MULTIPLIER = -1.0 # Inductor stamps -Z, so matrix shifts are inverted!
 
     def bind_nodes(self, node_map):
         self.idx_1 = node_map.get(self.data.get("n1", 0))
@@ -22,17 +26,27 @@ class Inductor(Component):
     # ==========================================
     # 2. THE PHYSICS EVALUATOR
     # ==========================================
-    def evaluate_physics(self, domain="time", w=0.0, dt=0.0, v_prev=None, method='TR', dp=0.0, **kwargs):
-        """Pure evaluation of companion models and AC impedance.
+    def evaluate_physics(self, v_k=None, overrides=None, **kwargs):
+        """Pure evaluation of companion models and AC impedance using absolute overrides.
         
         Because the Inductor uses a branch equation: V_L - Z * I_L = 0,
         this function calculates the equivalent Z (req) and history voltage (v_eq).
         """
-        l_val = self.value + dp
+        overrides = overrides or {}
+        
+        # Extract simulation state
+        domain = kwargs.get("domain", "time")
+        dt = kwargs.get("dt", 0.0)
+        w = kwargs.get("w", 0.0)
+        method = kwargs.get("method", "TR")
+        v_prev = kwargs.get("v_prev", None)
+
+        # PURE PHYSICS: Use override if provided, else use nominal value
+        eff_l = overrides.get(self.name, self.value)
         res = {"req": 0.0, "v_eq": 0.0}
 
         if domain == "frequency":
-            res["req"] = 1j * w * l_val
+            res["req"] = 1j * w * eff_l
             return res
 
         if domain == "time" and dt > 0.0:
@@ -40,7 +54,7 @@ class Inductor(Component):
             i_prev = v_prev[b] if v_prev is not None and b is not None else 0.0
 
             if method == 'TR':
-                req = (2.0 * l_val) / dt
+                req = (2.0 * eff_l) / dt
                 i = self.idx_1
                 j = self.idx_2
                 
@@ -50,7 +64,7 @@ class Inductor(Component):
                 
                 v_eq = req * i_prev + v_diff_prev
             else:  # 'BE'
-                req = l_val / dt
+                req = eff_l / dt
                 v_eq = req * i_prev
 
             res["req"] = req
@@ -59,10 +73,13 @@ class Inductor(Component):
         return res
 
     # ==========================================
-    # 3. THE STAMPERS (Generic Interface)
+    # 3. THE STAMPERS (Custom Branch Interface)
     # ==========================================
     def stamp_matrix(self, Y, res, *args):
-        """Stamps equivalent resistance (Transient) or complex impedance (AC) into the Jacobian."""
+        """Stamps equivalent resistance (Transient) or complex impedance (AC) into the Jacobian.
+        
+        Overrides base class because Inductors stamp exclusively into their branch row/col.
+        """
         req = res.get("req", 0.0)
         if req == 0.0 or self.branch_idx is None: return
         
@@ -88,14 +105,6 @@ class Inductor(Component):
             V_eq_hat = (self.value / dt) * i_L_hat
             J_hist[self.branch_idx] -= V_eq_hat
 
-    def get_delta_y(self, param_name, dp, domain="time", w=0.0, dt=0.0, method="TR", **kwargs):
-        """Calculates Woodbury Admittance shift."""
-        # For linear components, the shift is evaluated exactly at dp.
-        res = self.evaluate_physics(domain=domain, w=w, dt=dt, method=method, dp=dp)
-        
-        # Because the Inductor stamps -Z into the matrix, Delta Y is -req
-        return -res.get("req", 0.0)
-
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Inductance (L)."""
         if self.branch_idx is None: return {}
@@ -107,8 +116,8 @@ class Inductor(Component):
         i_L = VI[self.branch_idx]
         psi_branch = PsiPhi[self.branch_idx]
 
-        # dZ/dL evaluated exactly at L = 1.0
-        res_unity = self.evaluate_physics(dp=1.0 - self.value, **kwargs)
+        # NEW, PURE WAY: Tell physics evaluator to pretend L = 1.0
+        res_unity = self.evaluate_physics(overrides={self.name: 1.0}, **kwargs)
         dZ_dL = res_unity.get("req", 0.0)
 
         domain = kwargs.get('domain', 'time')
@@ -123,11 +132,12 @@ class Inductor(Component):
             dI_dt = dZ_dL * dI
             return {self.name: psi_branch * dI_dt}
 
-    def stamp_PQ(self, P, Q, col_idx):
+    def stamp_PQ(self, P, Q, start_col_idx):
         """Stamps the Injection (P) and Extraction (Q) topology vectors in-place."""
         b = self.branch_idx
         
         # P and Q both target the branch equation row/col, NOT the terminal nodes!
         if b is not None: 
-            P[b, col_idx] = 1.0
-            Q[b, col_idx] = 1.0
+            P[b, start_col_idx] = 1.0
+            Q[b, start_col_idx] = 1.0
+

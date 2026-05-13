@@ -184,7 +184,7 @@ class LargeChangeEngine:
                 # Linear circuits converge in exactly 1 iteration.
                 _, v_converged = nl_solver.solve(
                     v_ini=V_baseline, domain=domain, t=t, dt=current_dt, v_prev=v_prev,
-                    method=method, strategy=None 
+                    method=method, strategy=woodbury_strategy
                 )
 
                 if domain == "time" and current_dt > 0:

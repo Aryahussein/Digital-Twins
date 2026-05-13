@@ -878,10 +878,11 @@ def plot_combined_yield_pdf(mean_out, sigma_out, spec_min, spec_max, target_node
     plt.savefig(f"{folder}/{name}.png", dpi=300)
     plt.close()
 
-def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, step_idx, folder, name, combined_adjoint_mv=None, combined_woodbury_mv=None):
+def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, step_idx, folder, name, combined_adjoint_v=None, combined_woodbury_v=None):
     """
     Plots a unified grouped bar chart. 
     Shows Adjoint estimations for ALL parameters, and Woodbury truths for the top K.
+    Expects input data natively in Volts and converts to mV for rendering.
     """
     os.makedirs(folder, exist_ok=True)
 
@@ -890,20 +891,23 @@ def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, ste
     clean_data.reverse()
 
     params = [d['param'] for d in clean_data]
-    adj_vals = [d['dv_expected'] * 1000 for d in clean_data] # Adjoint in mV
+    
+    # CONVERT TO MILLIVOLTS STRICTLY FOR THE PLOT ARRAYS
+    adj_vals_mv = [d['dv_expected'] * 1000 for d in clean_data] 
     
     # 2. Extract Woodbury values (Assign 0.0 if Woodbury wasn't run on this parameter)
-    wb_vals = []
+    wb_vals_mv = []
     for p in params:
         if p in woodbury_deltas:
-            wb_vals.append(np.abs(woodbury_deltas[p]) * 1000)
+            wb_vals_mv.append(np.abs(woodbury_deltas[p]) * 1000)
         else:
-            wb_vals.append(0.0)
+            wb_vals_mv.append(0.0)
 
-    if combined_woodbury_mv is not None and combined_woodbury_mv > 0:
-        params.append("COMBINED CORNERS (5% Tol)")
-        adj_vals.append(combined_adjoint_mv)
-        wb_vals.append(combined_woodbury_mv)
+    # Append the combined corners (Converting the passed Volts to mV here)
+    if combined_woodbury_v is not None and combined_woodbury_v > 0:
+        params.append("COMBINED CORNERS (1σ)")
+        adj_vals_mv.append(combined_adjoint_v * 1000)
+        wb_vals_mv.append(combined_woodbury_v * 1000)
 
     # 3. Dynamic Height & Grouped Bar Setup
     dynamic_height = max(6, len(params) * 0.5)
@@ -913,8 +917,8 @@ def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, ste
     height = 0.4 
 
     # Plot Adjoint slightly above center, Woodbury slightly below center
-    rects1 = ax.barh(y + height/2, adj_vals, height, label='Adjoint Prediction (Linear)', color='lightblue', edgecolor='black')
-    rects2 = ax.barh(y - height/2, wb_vals, height, label='Woodbury Truth (Non-Linear)', color='coral', edgecolor='black')
+    rects1 = ax.barh(y + height/2, adj_vals_mv, height, label='Adjoint Prediction (Linear)', color='lightblue', edgecolor='black')
+    rects2 = ax.barh(y - height/2, wb_vals_mv, height, label='Woodbury Truth (Non-Linear)', color='coral', edgecolor='black')
 
     # 4. Formatting and Labels
     ax.set_yticks(y)
@@ -927,7 +931,7 @@ def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, ste
     ax.legend(loc='lower right', framealpha=0.9)
 
     # 5. Add text labels (but skip Woodbury text if it is 0.0)
-    max_val = max(max(adj_vals), max(wb_vals))
+    max_val = max(max(adj_vals_mv), max(wb_vals_mv))
     
     for rect in rects1:
         width = rect.get_width()

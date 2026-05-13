@@ -49,7 +49,11 @@ class CurrentSource(Component):
         self._apply_rhs_stamp(J, current_val)
 
     def _apply_rhs_stamp(self, sources, current_val):
-        """Internal helper to apply the nodal current flow."""
+        """Internal helper to apply the nodal current flow.
+        
+        Perfectly matches the unified MNA convention: 
+        Subtract from positive, add to negative.
+        """
         if self.idx_1 is not None:
             sources[self.idx_1] -= current_val
         if self.idx_2 is not None:
@@ -70,18 +74,11 @@ class CurrentSource(Component):
         # Sensitivity = -(Psi_positive - Psi_negative)
         return {self.name: -(p1 - p2)}
 
-    def stamp_PQ(self, P, Q, col_idx):
+    def stamp_PQ(self, P, Q, start_col_idx):
         """Independent sources do not populate the Admittance matrix (Y).
         
-        Because they only exist in the RHS vector (J), they have no P or Q 
-        topology to inject for Woodbury inversions.
+        This override MUST exist to prevent the Base Class from accidentally
+        injecting 2-terminal admittance topology into the Woodbury engine!
         """
         pass
 
-    def get_delta_y(self, param_name, dp, **kwargs):
-        """Transforms a physical parameter change into a scalar Admittance change.
-        
-        Because independent sources do not populate the Admittance matrix, 
-        their Delta Y shift is always mathematically zero.
-        """
-        return 0.0

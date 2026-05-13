@@ -94,14 +94,21 @@ if __name__ == "__main__":
     # =========================================================================
     # 1. CONFIGURATION & SETTINGS
     # =========================================================================
+    # netlist = "ring_oscilator"  # e.g., nmos_inverter, 1T1C_dram_cell
+    # 
+    # plot_nodes = ["n1", "n2", "n3"]
+    # output_nodes = ["n3"]
+    # target_node = "n3"
+    # target_parameter = "M3_W"
+
     netlist = "CMOS_inverter_CAP"  # e.g., nmos_inverter, 1T1C_dram_cell
-    file_path = f"../testfiles/{netlist}.txt"
-    
+
     plot_nodes = ["in", "out"]
     output_nodes = ["out"]
     target_node = "out"
     target_parameter = "CL"
     
+    file_path = f"../testfiles/{netlist}.txt"
     # --- Application Toggles ---
     run_sensitivity = True     # Calculates the Adjoint matrix
     
@@ -116,7 +123,7 @@ if __name__ == "__main__":
     # Set to an integer (e.g., 50) to evaluate a specific step, or None for Auto
     user_eval_step = None
 
-    number_of_large_change_params = 1 # Number of parameters to sweep in large change analysis
+    number_of_large_change_params = 4 # Number of parameters to sweep in large change analysis
 
     factory_tol = 0.05            # Components vary by ±5%
     manufacturing_sigma = 6       # Factory is a 6-Sigma process
@@ -225,9 +232,9 @@ if __name__ == "__main__":
         perform_sdwc_yield_analysis(
             circuit=circuit, 
             result=result, 
-            target_node="out", 
+            target_node=target_node, 
             calculated_params=calculated_params,
-            netlist_name="CMOS_Inverter", 
+            netlist_name=netlist,
             folder_map=folder_map,
             factory_tolerance=factory_tol,
             sigma_level=manufacturing_sigma,

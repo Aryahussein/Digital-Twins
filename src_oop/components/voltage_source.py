@@ -75,19 +75,10 @@ class VoltageSource(Component):
         
         return {self.name: psi_branch}
 
-    def stamp_PQ(self, P, Q, col_idx):
+    def stamp_PQ(self, P, Q, start_col_idx):
         """Independent sources do not change the Admittance matrix (Y).
         
-        While the Voltage Source has a topological presence in Y (+1/-1), its 
-        actual parameter value only exists in the RHS vector (J). Therefore, 
-        there is no P/Q injection topology required for Woodbury.
+        This override MUST exist to prevent the Base Class from accidentally
+        injecting 2-terminal admittance topology into the Woodbury engine!
         """
         pass
-
-    def get_delta_y(self, param_name, dp, **kwargs):
-        """Transforms a physical parameter change into a scalar Admittance change.
-        
-        Because independent sources do not alter the values inside the 
-        Admittance matrix, their Delta Y shift is always mathematically zero.
-        """
-        return 0.0

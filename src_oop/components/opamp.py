@@ -8,6 +8,10 @@ class OpAmp(Component):
     """
 
     REQUIRES_BRANCH_EQ = True
+    
+    # Base class Woodbury targets:
+    SHIFT_KEY = "gain"
+    SHIFT_MULTIPLIER = -1.0  # Gain acts inversely in the KVL branch equation
 
     def bind_nodes(self, node_map):
         # Input terminals
@@ -24,7 +28,19 @@ class OpAmp(Component):
         self.gain = self.data.get("value", 1e5)
 
     # ==========================================
-    # 1. STATIC STAMPING (Skeleton Matrix)
+    # 1. THE PHYSICS EVALUATOR
+    # ==========================================
+    def evaluate_physics(self, v_k=None, overrides=None, **kwargs):
+        """Calculates the effective open-loop gain using absolute overrides."""
+        overrides = overrides or {}
+        
+        # PURE PHYSICS: Use override if it exists, otherwise use nominal
+        eff_gain = overrides.get(self.name, self.gain)
+        
+        return {"gain": eff_gain}
+
+    # ==========================================
+    # 2. STATIC STAMPING (Skeleton Matrix)
     # ==========================================
     def stamp_base_matrix(self, Y):
         """
@@ -40,14 +56,18 @@ class OpAmp(Component):
             Y[self.idx_out, b] += 1.0  # Branch current leaves the output node
             Y[b, self.idx_out] += 1.0  # V_out term in the branch equation
 
+        # Ask evaluate_physics for the nominal gain
+        res = self.evaluate_physics()
+        gain = res.get("gain", 0.0)
+
         # 2. Control voltage dependencies in the branch row
         if self.idx_p is not None:
-            Y[b, self.idx_p] -= self.gain
+            Y[b, self.idx_p] -= gain
         if self.idx_m is not None:
-            Y[b, self.idx_m] += self.gain
+            Y[b, self.idx_m] += gain
 
     # ==========================================
-    # 2. SENSITIVITY & WOODBURY ENGINES
+    # 3. SENSITIVITY & WOODBURY ENGINES
     # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates exact sensitivity w.r.t Open-Loop Gain (A)."""
@@ -62,10 +82,10 @@ class OpAmp(Component):
         # Adjoint branch variable
         psi_branch = PsiPhi[b]
 
-        # Adjoint formula: Psi_branch * (V_plus - V_minus)
+        # Note: Because dY/dGain is -1.0, the adjoint math resolves to positive
         return {self.name: psi_branch * v_diff}
 
-    def stamp_PQ(self, P, Q, col_idx):
+    def stamp_PQ(self, P, Q, start_col_idx):
         """Stamps the VCVS topology for Woodbury updates.
         
         Injection (P): The auxiliary branch equation row.
@@ -76,17 +96,9 @@ class OpAmp(Component):
         
         # P: The gain parameter lives entirely inside the KVL branch equation row
         if b is not None: 
-            P[b, col_idx] = 1.0
+            P[b, start_col_idx] = 1.0
             
         # Q: The state variable multiplying the gain is (V_plus - V_minus)
-        if p is not None: Q[p, col_idx] = 1.0
-        if m is not None: Q[m, col_idx] = -1.0
+        if p is not None: Q[p, start_col_idx] = 1.0
+        if m is not None: Q[m, start_col_idx] = -1.0
 
-    def get_delta_y(self, param_name, dp, **kwargs):
-        """Transforms a physical parameter change into a scalar Admittance change.
-        
-        Because the KVL equation is V_out - A * (V_p - V_m) = 0, the gain A 
-        is stamped as a negative multiplier for V_p. Therefore, if the gain 
-        shifts by dp, the matrix shifts by -dp.
-        """
-        return -dp

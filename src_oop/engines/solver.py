@@ -139,41 +139,44 @@ class StandardDirectStrategy:
         return lu, v_new
 
 class ExplicitWoodburyStrategy:
-    """The Advanced Woodbury Strategy for optimized Large Change Analysis.
-    
-    Bypasses global matrix operations entirely by extracting the non-linear 
-    residual and asking specific components for their localized k x k Delta G 
-    shifts. Achieves O(1) solving time for parameter sweeps.
-    """
     
     def __init__(self, circuit, param_names, lu_base, v_nom, dp_array=None):
-        """Precomputes the heavy topological transformations for the Woodbury identity.
-        
-        Args:
-            circuit (Circuit): The active circuit orchestrator.
-            param_names (list[str]): Names of parameters being shifted (e.g., ['R1_value']).
-            lu_base (scipy.sparse.linalg.SuperLU): The cached baseline factorization.
-            v_nom (numpy.ndarray): The baseline convergence voltages.
-            dp_array (numpy.ndarray, optional): The physical deltas to apply. Defaults to 0.0.
-        """
-        self.param_names = param_names
         self.lu_base = lu_base
         self.v_nom = v_nom  
-        self.dp_array = dp_array if dp_array is not None else np.zeros(len(param_names))
+        self.comp_to_shifts = {}
+        swept_comps = set()
+        
+        if dp_array is not None:
+            for p, dp in zip(param_names, dp_array):
+                comp = circuit.param_to_component_map[p]
+                swept_comps.add(comp)
+                if comp not in self.comp_to_shifts:
+                    self.comp_to_shifts[comp] = {}
+                self.comp_to_shifts[comp][p] = dp
+
+        nl_comps = set(getattr(circuit, '_nl_comps', []))
+        self.active_components = list(swept_comps.union(nl_comps))
         
         self.N = circuit.total_dim
-        self.k = len(param_names)
         
-        self.param_map = circuit.param_to_component_map
+        self.comp_indices = {}
+        self.k = 0
+        
+        for comp in self.active_components:
+            rank = getattr(comp, 'rank', 1) # Default to 1 if not specified
+            self.comp_indices[comp] = (self.k, self.k + rank)
+            self.k += rank
+            
         self.P = np.zeros((self.N, self.k))
         self.Q = np.zeros((self.N, self.k))
         
-        for col_idx, param in enumerate(self.param_names):
-            comp = self.param_map[param]
-            comp.stamp_PQ(self.P, self.Q, col_idx)
+        for comp in self.active_components:
+            start_idx, _ = self.comp_indices[comp]
+            comp.stamp_PQ(self.P, self.Q, start_idx)
 
         self.X = self.lu_base.solve(self.P)
         self.QT_X = self.Q.T @ self.X
+
 
     def solve_step(self, circuit, v_k, domain, t, dt, v_prev, method, gmin=0.0, source_scale=1.0):
         """Solves the system using the Woodbury matrix identity instead of LU.
@@ -208,16 +211,24 @@ class ExplicitWoodburyStrategy:
         if source_scale != 1.0:
             J_iter *= source_scale
 
-        # 2. Build local Delta G matrix
         delta_G = np.zeros((self.k, self.k), dtype=complex if domain=="frequency" else float)
-        for i, param in enumerate(self.param_names):
-            comp = self.param_map[param]
-            dp = self.dp_array[i]
-            delta_G[i, i] = comp.get_delta_y(
-                param, dp, domain=domain, dt=dt, method=method, V_nom=self.v_nom, V_k=v_k
+        
+        for comp in self.active_components:
+            start_idx, end_idx = self.comp_indices[comp]
+            shifts_dict = self.comp_to_shifts.get(comp, {})
+            
+            # Fetch the shift (Could be a scalar for CL, or a 2x2 matrix for MOSFET)
+            val = comp.get_delta_y(
+                shifts=shifts_dict, V_nom=self.v_nom, V_k=v_k, 
+                domain=domain, dt=dt, method=method
             )
 
-        # 3. Woodbury Math
+            if isinstance(val, np.ndarray):
+                delta_G[start_idx:end_idx, start_idx:end_idx] = val
+            else:
+                delta_G[start_idx, start_idx] = val
+
+        # 3. Standard Woodbury Math
         V_lin = self.lu_base.solve(J_iter)
         QT_V = self.Q.T @ V_lin
         
@@ -340,7 +351,12 @@ class NonlinearSolver:
 
             delta_v = np.abs(v_new - v_k)
             max_error = np.max(delta_v)
-            v_k = v_k + alpha * (v_new - v_k)
+
+            max_step = 0.3
+            delta_v = v_new - v_k
+            delta_v_clamped = np.clip(delta_v, -max_step, max_step)
+
+            v_k = v_k + alpha * delta_v_clamped
 
             if max_error < self.tol:
                 if self.print_stuff: 

@@ -16,7 +16,7 @@ def evaluate_deep_yield_at_step(
 ):
     print(f"\n[{metric_label}] Evaluating Deep Yield at Step {step_idx} (t={result.sweep_axis[step_idx]*1e9:.2f}ns)")
     
-    # 1. Calculate LC Yield (This internally runs the pure +1σ Woodbury jumps from t=0)
+    # 1. Calculate LC Yield
     mean_lc, sigma_lc, yield_lc, _, woodbury_deltas = calculate_large_change_yield(
         circuit=circuit, base_result=result, target_node=target_node, 
         step_idx=step_idx, top_params=top_params, spec_min=dynamic_min, 
@@ -43,14 +43,9 @@ def evaluate_deep_yield_at_step(
         param = d['param']
         p_idx = sensitivities.param_index[param]
         
-        # Grab the exact Adjoint derivative for THIS specific time step
         raw_sens = sensitivities.data[p_idx, o_idx, step_idx]
-        
-        # Calculate the physical 1-Sigma shift
         p_sigma = (p_nom * factory_tol) / manufacturing_sigma
-        
-        # Expected linear delta V
-        expected_dv = np.abs(raw_sens * p_sigma)
+        expected_dv = np.abs(raw_sens * p_sigma) # Stored purely in Volts
         
         step_specific_ranking.append({
             'param': param,
@@ -60,18 +55,19 @@ def evaluate_deep_yield_at_step(
         
     step_specific_ranking.sort(key=lambda x: x['dv_expected'], reverse=True)
 
-    combined_adjoint_mv = 0.0
-    combined_woodbury_mv = 0.0
+    # VARIABLES RENAMED TO '_v' TO EXPLICITLY DENOTE NATIVE UNITS
+    combined_adjoint_v = 0.0
+    combined_woodbury_v = 0.0
     
     if env_min_v is not None and env_max_v is not None:
         v_nom = result.VI[step_idx][result.node_map[target_node]]
         
-        # Woodbury Truth: The max deviation to the edge of the physical envelope
-        combined_woodbury_mv = max(abs(env_max_v - v_nom), abs(env_min_v - v_nom)) * 1000
+        # Woodbury Truth: 1-Sigma equivalent spread (IN VOLTS)
+        full_envelope_dev = max(abs(env_max_v - v_nom), abs(env_min_v - v_nom))
+        combined_woodbury_v = full_envelope_dev / manufacturing_sigma
         
-        # Adjoint Prediction: The linear sum of all parameters shifted by 5%
-        # (dv_expected is currently 1-sigma. Multiply by sigma_level to get the full 5% factory tol)
-        combined_adjoint_mv = sum([d['dv_expected'] * manufacturing_sigma * 1000 for d in step_specific_ranking])
+        # Adjoint Prediction: Linear sum of 1-Sigma shifts (IN VOLTS)
+        combined_adjoint_v = sum([d['dv_expected'] for d in step_specific_ranking])
 
     # =========================================================================
     # Generate Plots specifically for this step
@@ -85,8 +81,8 @@ def evaluate_deep_yield_at_step(
         step_idx=step_idx, 
         folder=folder, 
         name=f"{plot_name}_unified_pareto",
-        combined_adjoint_mv=combined_adjoint_mv,
-        combined_woodbury_mv=combined_woodbury_mv
+        combined_adjoint_v=combined_adjoint_v,   # Passing Native Volts
+        combined_woodbury_v=combined_woodbury_v  # Passing Native Volts
     )
     
     plot_combined_yield_pdf(
@@ -126,11 +122,11 @@ def perform_sdwc_yield_analysis(
         circuit, result, target_node, corner_alphas, top_params, eval_step=None 
     )
 
-    print(f"\n--- [DEBUG] SCOUT DELTA MATRIX ---")
-    print(f"Alphas used: {corner_alphas}")
-    print(f"Parameters:  {top_params}")
-    print(f"DP Matrix:\n{dp_matrix_corners}")
-    print(f"----------------------------------")
+    # print(f"\n--- [DEBUG] SCOUT DELTA MATRIX ---")
+    # print(f"Alphas used: {corner_alphas}")
+    # print(f"Parameters:  {top_params}")
+    # print(f"DP Matrix:\n{dp_matrix_corners}")
+    # print(f"----------------------------------")
     
     lc_envelope = engine.compute(
         result=result, param_names=top_params, dp_matrix=dp_matrix_corners,

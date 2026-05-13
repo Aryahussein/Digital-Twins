@@ -6,6 +6,9 @@ class Diode(Component):
     """Nonlinear Diode (Type 'D') using generic MNA stamping."""
 
     IS_NONLINEAR = True
+    
+    # Tells the Base Class time-travel function and matrix stamper which key to extract!
+    SHIFT_KEY = "gd"
 
     def __init__(self, name, data_dict):
         super().__init__(name, data_dict)
@@ -56,32 +59,33 @@ class Diode(Component):
     # ==========================================
     # 1. THE PHYSICS EVALUATOR
     # ==========================================
-    def evaluate_physics(self, domain="static", t=0.0, dt=0.0, w=0.0, v_prev=None, v_k=None, method="TR", param_name=None, dp=0.0, **kwargs):
-        """Pure mathematical evaluation. Packs all data into a single generic dictionary."""
+    def evaluate_physics(self, v_k=None, overrides=None, **kwargs):
+        """Pure mathematical evaluation. Safely applies absolute parameter overrides."""
         res = {}
         
         # Diode only evaluates if we have a valid non-linear voltage guess
         if v_k is None:
             return res
             
+        overrides = overrides or {}
+            
         va = v_k[self.idx_a] if self.idx_a is not None else 0.0
         vk = v_k[self.idx_k] if self.idx_k is not None else 0.0
         vd = va - vk
 
-        is_val = self.IS
-        
-        # Apply physical shifts if requested by the Large Change Engine
-        if param_name and dp != 0.0:
-            if param_name.endswith("_IS"): 
-                is_val += dp
+        # PURE PHYSICS: Use the override if it exists, otherwise use nominal
+        eff_is = overrides.get(f"{self.name}_IS", self.IS)
 
         # 1. Core Physics Evaluation
-        phys_res = models.evaluate_diode(vd, is_val, self.VT)
+        phys_res = models.evaluate_diode(vd, eff_is, self.VT)
         id_val, gd = phys_res["I_D"], phys_res["gd"]
         
         # 2. Pack data for the generic Stampers
         res["gd"] = gd
-        res["ieq"] = id_val - gd * vd # Equivalent NR Current
+        # Standard Newton-Raphson Equivalent Current (I_eq = I_D - G_D * V_D)
+        # Because it is positive here, the Base Class will correctly subtract it 
+        # from the positive node's RHS vector (J[pos] -= I_eq).
+        res["I_eq"] = id_val - gd * vd 
         
         # 3. Pack data for the Sensitivity/Adjoint engines
         res["dId_dIs"] = phys_res["dId_dIs"]
@@ -89,35 +93,7 @@ class Diode(Component):
         return res
 
     # ==========================================
-    # 2. THE STAMPERS (Generic Interface)
-    # ==========================================
-    def stamp_matrix(self, Y, res, *args):
-        """Stamps the dynamic conductance (gd) into the Jacobian."""
-        if "gd" not in res: return
-        
-        gd = res["gd"]
-        a, k = self.idx_a, self.idx_k
-
-        if a is not None:
-            Y[a, a] += gd
-            if k is not None: Y[a, k] -= gd
-
-        if k is not None:
-            Y[k, k] += gd
-            if a is not None: Y[k, a] -= gd
-
-    def stamp_rhs(self, J, res, *args):
-        """Stamps the equivalent NR current into the Residual vector."""
-        if "ieq" not in res: return
-        
-        ieq = res["ieq"]
-        a, k = self.idx_a, self.idx_k
-
-        if a is not None: J[a] -= ieq
-        if k is not None: J[k] += ieq
-
-    # ==========================================
-    # SENSITIVITY ENGINES
+    # 2. SENSITIVITY ENGINES
     # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates sensitivity w.r.t Saturation Current (IS)."""
@@ -138,32 +114,4 @@ class Diode(Component):
             for attr in self._diff_attrs
             if attr in sens_map
         }
-    
-    def stamp_PQ(self, P, Q, col_idx):
-        """Stamps the Injection (P) and Extraction (Q) topology vectors in-place."""
-        a, k = self.idx_a, self.idx_k
         
-        if a is not None: 
-            P[a, col_idx] = 1.0
-            Q[a, col_idx] = 1.0
-        if k is not None: 
-            P[k, col_idx] = -1.0
-            Q[k, col_idx] = -1.0
-
-    def get_delta_y(self, param_name, dp, V_nom=None, V_k=None, **kwargs):
-        """
-        Calculates exact Woodbury admittance shifts per the slides.
-        Bypasses double-counting by using the DRY 'time-travel' trick.
-        """
-        # 1. New State (Evaluated at current NR guess V_k, with NEW parameter)
-        # The engine already shifted the component, so dp=0.0 is the new reality.
-        res_new = self.evaluate_physics(v_k=V_k, param_name=param_name, dp=0.0, **kwargs)
-        G_new = res_new["gd"]
-        
-        # 2. Old State (Evaluated at converged baseline V_nom, with OLD parameter)
-        # We peek back at the original unshifted component by subtracting dp.
-        res_old = self.evaluate_physics(v_k=V_nom, param_name=param_name, dp=-dp, **kwargs)
-        G_old = res_old["gd"]
-        
-        # 3. The exact mathematical difference
-        return G_new - G_old

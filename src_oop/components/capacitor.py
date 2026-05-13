@@ -5,6 +5,7 @@ class Capacitor(Component):
     
     IS_DYNAMIC = True
     IS_AC_REACTIVE = True
+    SHIFT_KEY = "g_eq"
     
     def bind_nodes(self, node_map):
         self.idx_1 = node_map.get(self.data.get("n1", 0))
@@ -14,13 +15,23 @@ class Capacitor(Component):
     # ==========================================
     # 1. THE PHYSICS EVALUATOR
     # ==========================================
-    def evaluate_physics(self, domain="time", w=0.0, dt=0.0, v_prev=None, method='TR', dp=0.0, **kwargs):
-        """Pure evaluation of companion models and AC admittance."""
-        c_val = self.value + dp
+    def evaluate_physics(self, v_k=None, overrides=None, **kwargs):
+        """Pure evaluation of companion models and AC admittance using absolute overrides."""
+        overrides = overrides or {}
+        
+        # Extract simulation state from the kwargs bus
+        domain = kwargs.get("domain", "time")
+        dt = kwargs.get("dt", 0.0)
+        w = kwargs.get("w", 0.0)
+        method = kwargs.get("method", "TR")
+        v_prev = kwargs.get("v_prev", None)
+
+        # PURE PHYSICS: Use the override if provided, else use the nominal value
+        eff_c = overrides.get(self.name, self.value)
         res = {"g_eq": 0.0, "I_eq": 0.0}
 
         if domain == "frequency":
-            res["g_eq"] = 1j * w * c_val
+            res["g_eq"] = 1j * w * eff_c
             return res
 
         if domain == "time" and dt > 0.0:
@@ -30,40 +41,18 @@ class Capacitor(Component):
             v_diff_prev = v1_prev - v2_prev
 
             if method == 'TR':
-                g_eq = (2.0 * c_val) / dt
-                I_eq = g_eq * v_diff_prev + self.prev_current
+                g_eq = (2.0 * eff_c) / dt
+                # FLIPPED SIGN: Maps perfectly to the unified MNA RHS stamper
+                I_eq = -(g_eq * v_diff_prev + self.prev_current)
             else:  # 'BE'
-                g_eq = c_val / dt
-                I_eq = g_eq * v_diff_prev
+                g_eq = eff_c / dt
+                # FLIPPED SIGN: Maps perfectly to the unified MNA RHS stamper
+                I_eq = -(g_eq * v_diff_prev)
 
             res["g_eq"] = g_eq
             res["I_eq"] = I_eq
 
         return res
-
-    # ==========================================
-    # 2. THE STAMPERS (Generic Interface)
-    # ==========================================
-    def stamp_matrix(self, Y, res, *args):
-        """Stamps equivalent conductance (Transient) or complex admittance (AC) into the Jacobian."""
-        g_eq = res.get("g_eq", 0.0)
-        if g_eq == 0.0: return
-        
-        i, j = self.idx_1, self.idx_2
-        if i is not None: Y[i, i] += g_eq
-        if j is not None: Y[j, j] += g_eq
-        if i is not None and j is not None:
-            Y[i, j] -= g_eq
-            Y[j, i] -= g_eq
-
-    def stamp_rhs(self, J, res, *args):
-        """Stamps equivalent history current into the Residual vector."""
-        I_eq = res.get("I_eq", 0.0)
-        if I_eq == 0.0: return
-        
-        i, j = self.idx_1, self.idx_2
-        if i is not None: J[i] += I_eq
-        if j is not None: J[j] -= I_eq
 
     # ==========================================
     # TRANSIENT STATE MANAGEMENT
@@ -73,18 +62,16 @@ class Capacitor(Component):
         if dt == 0.0:
             return
             
-        # 1. Get the current voltage difference
         v1_now = v_now[self.idx_1] if self.idx_1 is not None else 0.0
         v2_now = v_now[self.idx_2] if self.idx_2 is not None else 0.0
         v_now_diff = v1_now - v2_now
 
-        # 2. Ask evaluate_physics for the companion parameters (G_eq, I_eq)
         res = self.evaluate_physics(domain="time", dt=dt, v_prev=v_prev, method=method)
         g_eq = res["g_eq"]
         I_eq = res["I_eq"]
 
-        # 3. Apply the Universal Companion Equation
-        self.prev_current = (g_eq * v_now_diff) - I_eq
+        # CHANGED TO PLUS: Because I_eq is mathematically negated in evaluate_physics
+        self.prev_current = (g_eq * v_now_diff) + I_eq
 
     # ==========================================
     # SENSITIVITY ENGINES
@@ -97,28 +84,6 @@ class Capacitor(Component):
         I_eq = (self.value / dt) * (v1_hat - v2_hat)
         if i is not None: J_hist[i] += I_eq
         if j is not None: J_hist[j] -= I_eq
-
-    def get_delta_y(self, param_name, dp, domain="time", w=0.0, dt=0.0, method="TR", **kwargs):
-        """
-        Calculates exact Woodbury admittance shift using the DRY principle.
-        Relies entirely on evaluate_physics to ensure math formulas are never duplicated.
-        """
-        # 1. Evaluate Admittance at the NEW physical reality 
-        # (self.value was already shifted by the Engine, so we add 0.0)
-        res_new = self.evaluate_physics(
-            domain=domain, w=w, dt=dt, method=method, dp=0.0, **kwargs
-        )
-        G_new = res_new["g_eq"]
-
-        # 2. Evaluate Admittance at the OLD physical reality
-        # (We peek back in time by subtracting the delta parameter)
-        res_old = self.evaluate_physics(
-            domain=domain, w=w, dt=dt, method=method, dp=-dp, **kwargs
-        )
-        G_old = res_old["g_eq"]
-
-        # 3. The true mathematical shift is the exact difference
-        return G_new - G_old
 
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """Calculates exact sensitivities w.r.t Capacitance (C)."""
@@ -133,8 +98,8 @@ class Capacitor(Component):
 
         adj_diff = (p1 - p2)
 
-        # dY/dC is exactly the admittance evaluated at C = 1.0
-        res_unity = self.evaluate_physics(dp=1.0 - self.value, **kwargs)
+        # NEW, PURE WAY: Tell the physics evaluator to pretend C = 1.0!
+        res_unity = self.evaluate_physics(overrides={self.name: 1.0}, **kwargs)
         dY_dC = res_unity["g_eq"]
 
         domain = kwargs.get('domain', 'time')
@@ -149,14 +114,3 @@ class Capacitor(Component):
         dI_dC = dY_dC * dV
 
         return {self.name: -adj_diff * dI_dC}
-
-    def stamp_PQ(self, P, Q, col_idx):
-        """Stamps the Injection (P) and Extraction (Q) topology vectors in-place."""
-        i, j = self.idx_1, self.idx_2
-        
-        if i is not None: 
-            P[i, col_idx] = 1.0
-            Q[i, col_idx] = 1.0
-        if j is not None: 
-            P[j, col_idx] = -1.0
-            Q[j, col_idx] = -1.0
