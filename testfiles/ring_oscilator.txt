@@ -28,3 +28,4 @@ C3 n3 0 100f
 * Analyses
 .TRAN 10p 5n
 .OP
+

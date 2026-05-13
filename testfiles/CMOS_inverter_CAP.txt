@@ -1,23 +1,31 @@
-* CMOS Inverter Driving a Capacitive Load
-* Nodes: VDD (1), GND (0), Input (in), Output (out)
+* ====================================================================
+* STATISTICAL CMOS INVERTER NETLIST
+* ====================================================================
 
-* Power Supply (1.8V)
-VDD 1 0 1.8
+* 1. THE POWER SUPPLY (Strict Tolerance)
+* Using AGAUSS (Absolute Gauss): 1.8V nominal, +/- 36mV at 3-sigma (2% tolerance)
+V_VDD VDD 0 AGAUSS(1.8, 0.036, 3)
 
-* Input Signal (Pulse: 0 to 1.8V, 1ns delay, 100ps rise/fall, 2ns width, 4ns period)
-Vin in 0 PULSE(0 1.8 1n 100p 100p 2n 4n)
+* 2. THE INPUT SIGNAL (Perfectly ideal, no statistical variance)
+V_IN IN 0 PULSE(0 1.8 1n 10p 10p 2n 4n)
 
-* Inverter PMOS (pull-up)
-M_P out in 1 1 PMOS W=2u L=0.18u
+* 3. GLOBAL PROCESS CORNERS (Baked into the .MODEL definitions)
+* Using GAUSS (Relative Gauss): +/- 5% variance on VTO, 10% on KP at 3-sigma
+.MODEL NMOS_MOD NMOS (VTO=GAUSS(0.7, 0.05, 3) KP=GAUSS(120u, 0.10, 3))
+.MODEL PMOS_MOD PMOS (VTO=GAUSS(-0.7, 0.05, 3) KP=GAUSS(40u, 0.10, 3))
 
-* Inverter NMOS (pull-down)
-M_N out in 0 0 NMOS W=1u L=0.18u
+* 4. LOCAL DEVICE MISMATCH (Baked into the specific Component Instances)
+* Even though they use the same W/L, manufacturing causes local 2% fluctuations
+M_N OUT IN 0 0 NMOS_MOD W=GAUSS(2u, 0.02, 3) L=0.18u
+M_P OUT IN VDD VDD PMOS_MOD W=GAUSS(4u, 0.02, 3) L=0.18u
 
-* Load Capacitance
-CL out 0 50f
+* 5. THE LOAD (10% variance using a Uniform distribution instead of Gaussian)
+C_LOAD OUT 0 UNIF(10f, 0.10)
 
-.MODEL NMOS NMOS (LEVEL=1 VTO=0.4 KP=170u GAMMA=0.5 LAMBDA=0.1 PHI=0.7)
-.MODEL PMOS PMOS (LEVEL=1 VTO=-0.4 KP=50u GAMMA=0.5 LAMBDA=0.1 PHI=0.7)
+* ====================================================================
+.TRAN 0.01n 10n
+.END
 
-* Analyses
-.TRAN 10p 10n
+
+
+

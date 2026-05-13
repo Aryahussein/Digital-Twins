@@ -95,7 +95,7 @@ if __name__ == "__main__":
     # 1. CONFIGURATION & SETTINGS
     # =========================================================================
     # netlist = "ring_oscilator"  # e.g., nmos_inverter, 1T1C_dram_cell
-    # 
+    #
     # plot_nodes = ["n1", "n2", "n3"]
     # output_nodes = ["n3"]
     # target_node = "n3"
@@ -103,9 +103,9 @@ if __name__ == "__main__":
 
     netlist = "CMOS_inverter_CAP"  # e.g., nmos_inverter, 1T1C_dram_cell
 
-    plot_nodes = ["in", "out"]
-    output_nodes = ["out"]
-    target_node = "out"
+    plot_nodes = ["IN", "OUT"]
+    output_nodes = ["OUT"]
+    target_node = "OUT"
     target_parameter = "CL"
     
     file_path = f"../testfiles/{netlist}.txt"
@@ -125,8 +125,8 @@ if __name__ == "__main__":
 
     number_of_large_change_params = 4 # Number of parameters to sweep in large change analysis
 
-    factory_tol = 0.05            # Components vary by ±5%
-    manufacturing_sigma = 6       # Factory is a 6-Sigma process
+    factory_tol = 0.2           # Components vary by ±5%
+    manufacturing_sigma = 1       # Factory is a 6-Sigma process
 
     output_spec = 0.05             # Output voltage must stay within ±5%
     output_sigma_req = 6          # We demand a 6-Sigma yield from the circuit
@@ -229,7 +229,7 @@ if __name__ == "__main__":
     # =========================================================================
     if yield_analysis:
         print("\n=== EXECUTING YIELD ANALYSIS ===")
-        perform_sdwc_yield_analysis(
+        res =  perform_sdwc_yield_analysis(
             circuit=circuit, 
             result=result, 
             target_node=target_node, 

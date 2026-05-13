@@ -19,6 +19,29 @@ def _get_nominal_values(circuit, param_names):
         p_vals.append(comp.get_nominal_value(param))
     return np.array(p_vals)
 
+
+def _get_param_specs(circuit, param_name):
+    """
+    Fetches the hardcoded netlist tolerance (e.g. GAUSS) for a parameter.
+    If no statistical wrapper was used, assumes the component is deterministic (tolerance = 0.0).
+    """
+    comp = circuit.param_to_component_map.get(param_name)
+    param_base = param_name.split('_')[-1] # Extracts 'W' from 'M_N_W'
+    
+    if comp and "stat_params" in comp.data:
+        # Check instance-level params (e.g., M_N_W)
+        if param_base in comp.data["stat_params"]:
+            stats = comp.data["stat_params"][param_base]
+            return stats["tol"], stats["sigma"]
+            
+        # Check primary value (e.g., V_VDD or C_LOAD)
+        if "VALUE" in comp.data["stat_params"]:
+            stats = comp.data["stat_params"]["VALUE"]
+            return stats["tol"], stats["sigma"]
+            
+    # --- NEW: If the netlist didn't specify, the component is deterministic (0 variance)! ---
+    return 0.0, 0
+
 def analyze_and_rank_sensitivities_globally(circuit, result, target_node, candidate_params, k=3, tolerance_pct=0.05):
     sensitivities = result.sensitivities
     o_idx = sensitivities.output_index[target_node]
@@ -32,14 +55,16 @@ def analyze_and_rank_sensitivities_globally(circuit, result, target_node, candid
 
     for param, p_nom in zip(candidate_params, p_noms):
         if p_nom == 0: continue
-        comp_name = param.split('_')[0].upper()
-        if comp_name.startswith('V') or comp_name.startswith('I'): continue
+        # comp_name = param.split('_')[0].upper()
+        # if comp_name.startswith('V') or comp_name.startswith('I'): continue
             
         p_idx = sensitivities.param_index[param]
         raw_sens_waveform = sensitivities.data[p_idx, o_idx, :]
+
+        p_tol, _ = _get_param_specs(circuit, param)
         
         # dV/dp * delta_p
-        expected_dv_waveform = np.abs(raw_sens_waveform * p_nom * tolerance_pct)
+        expected_dv_waveform = np.abs(raw_sens_waveform * p_nom * p_tol)
         
         # Build Metric 2 (Sum of Variances)
         total_variance_waveform += expected_dv_waveform**2
@@ -60,9 +85,13 @@ def analyze_and_rank_sensitivities_globally(circuit, result, target_node, candid
     k_actual = min(k, len(full_ranking))
     top_params = [data['param'] for data in full_ranking[:k_actual]]
     
+    sim_start = 0
+    if getattr(result, "analysis_type", "") == ".TRAN":
+        sim_start = 1
+
     # Extract the exact time steps for the metrics
-    step_metric1 = int(np.argmax(max_individual_dv_waveform))
-    step_metric2 = int(np.argmax(total_variance_waveform))
+    step_metric1 = int(np.argmax(max_individual_dv_waveform[sim_start:])) + sim_start
+    step_metric2 = int(np.argmax(total_variance_waveform[sim_start:])) + sim_start
     
     return top_params, full_ranking, step_metric1, step_metric2
 
@@ -93,7 +122,9 @@ def generate_worst_case_deltas(circuit, result, target_node, alpha_array, top_pa
     
     weights = np.sign(S_norm) 
     weights[weights == 0] = 1.0 
-    dp_matrix = alpha_array[:, None] * weights[None, :] * p_nom[None, :]
+   
+    param_tols = np.array([_get_param_specs(circuit, p)[0] for p in top_params])
+    dp_matrix = alpha_array[:, None] * weights[None, :] * param_tols[None, :] * p_nom[None, :]
     
     return dp_matrix
 
@@ -146,9 +177,10 @@ def calculate_large_change_yield(circuit, base_result, target_node, step_idx, to
     print("\n--- Executing Isolated Woodbury +1\u03c3 Jumps ---")
     
     for i, param in enumerate(top_params):
-        # 1. Calculate the exact +1 sigma shift for THIS parameter only
         p_nom = _get_nominal_values(circuit, [param])[0]
-        p_sigma = (p_nom * tolerance_pct) / sigma_level
+        p_tol, p_sigma_level = _get_param_specs(circuit, param)
+        
+        p_sigma = (p_nom * p_tol) / p_sigma_level
         
         # 2. Build a localized 1x1 sweep matrix (One parameter, One variation)
         dp_matrix = np.array([[p_sigma]])

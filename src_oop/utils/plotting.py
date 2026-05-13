@@ -888,6 +888,7 @@ def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, ste
 
     # 1. Filter out zero-impact noise and reverse for plotting (largest at top)
     clean_data = [d for d in step_specific_ranking if d['dv_expected'] > 1e-9]
+    # clean_data = step_specific_ranking
     clean_data.reverse()
 
     params = [d['param'] for d in clean_data]

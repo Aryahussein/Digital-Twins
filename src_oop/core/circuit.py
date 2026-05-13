@@ -95,12 +95,13 @@ class Circuit:
             parsed_components (dict): Raw dictionary from the NetlistParser where
                 keys are component names and values are parameter dictionaries.
         """
+        print(parsed_components)
         # 1. Turn dictionaries into Objects using the factory!
         self.components = [
             create_component(name, data) 
             for name, data in parsed_components.items()
         ]
-        
+
         # 2. Keep a dictionary for fast O(1) lookups by name
         self.components_dict = {comp.name: comp for comp in self.components}
         

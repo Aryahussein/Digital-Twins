@@ -178,7 +178,6 @@ class LargeChangeEngine:
                 # Maintain transient history correctly based on the domain
                 v_prev = v_prev_variation if domain == "time" else V_baseline
 
-
                 # THE UNIFIED SOLVE: 
                 # Injects the Woodbury Strategy into the core Newton-Raphson loop.
                 # Linear circuits converge in exactly 1 iteration.
