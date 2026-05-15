@@ -6,6 +6,8 @@ structure for the simulator. It includes the factory logic to instantiate
 polymorphic components from parsed netlist dictionaries and generates the 
 Modified Nodal Analysis (MNA) matrix indexing scheme.
 """
+import scipy.sparse as sp
+import numpy as np
 
 # Import all component subclasses from the new modular package
 from components import (
@@ -93,12 +95,13 @@ class Circuit:
             parsed_components (dict): Raw dictionary from the NetlistParser where
                 keys are component names and values are parameter dictionaries.
         """
+        print(parsed_components)
         # 1. Turn dictionaries into Objects using the factory!
         self.components = [
             create_component(name, data) 
             for name, data in parsed_components.items()
         ]
-        
+
         # 2. Keep a dictionary for fast O(1) lookups by name
         self.components_dict = {comp.name: comp for comp in self.components}
         
@@ -109,6 +112,15 @@ class Circuit:
         # 4. Tell every component to cache its matrix indices!
         for comp in self.components:
             comp.bind_nodes(self.node_map)
+
+        # 5. Pre-sort components using Capability Flags (Open-Closed Principle!)
+        # The Circuit no longer cares what the component *is*, only what it *does*.
+        self._src_comps = [c for c in self.components if getattr(c, 'IS_INDEPENDENT_SOURCE', False)]
+        self._tran_comps = [c for c in self.components if getattr(c, 'IS_DYNAMIC', False)]
+        self._ac_comps = [c for c in self.components if getattr(c, 'IS_AC_REACTIVE', False)]
+        self._nl_comps = [c for c in self.components if getattr(c, 'IS_NONLINEAR', False)]
+        
+        self.is_nonlinear = len(self._nl_comps) > 0
 
     def get_idx(self, node):
         """Retrieves the matrix row/column index for a given node.
@@ -127,7 +139,6 @@ class Circuit:
         for comp in self.components:
             for key in ["n1", "n2", "n3", "n4", 'n_d', 'n_g', 'n_s', 'n_b']:
                 val = comp.data.get(key, 0)
-                # Ensure we aren't adding string grounds
                 if val != 0 and val != "0" and str(val).upper() != "GND": 
                     nodes.add(val)
 
@@ -140,9 +151,9 @@ class Circuit:
             node_map[node] = current_idx
             current_idx += 1
 
-        # Map MNA current branches (Voltage sources, Inductors, OpAmps, etc.)
+        # Map MNA current branches using the Open-Closed Principle!
         for comp in self.components:
-            if comp.type in ["V", "L", "H", "E"]: 
+            if getattr(comp, 'REQUIRES_BRANCH_EQ', False): 
                 node_map[comp.name] = current_idx
                 current_idx += 1
                 
@@ -154,7 +165,6 @@ class Circuit:
             raise KeyError(f"Component '{name}' not found in circuit.")
         return self.components_dict[name]
 
-
     @property
     def differentiable_params(self):
         """A master list of all tunable parameters in the circuit."""
@@ -164,3 +174,93 @@ class Circuit:
                 if p not in params:
                     params.append(p)
         return params
+
+    @property
+    def param_to_component_map(self):
+        """Returns an O(1) lookup dictionary mapping parameter strings to their Component objects."""
+        mapping = {}
+        for comp in self.components:
+            for p in comp.differentiable_params:
+                mapping[p] = comp
+        return mapping
+
+    def precompute_base(self):
+        """Compiles the static skeleton matrix exactly ONCE.
+        
+        Always builds as 'float' to maximize Transient/DC performance.
+        MNA topology (+1/-1) and Resistors are purely real.
+        """
+        # No more domain checks! Always blazing fast floats.
+        self._Y_base = sp.lil_matrix((self.total_dim, self.total_dim), dtype=float)
+        
+        for comp in self.components:
+            if hasattr(comp, 'stamp_base_matrix'):
+                comp.stamp_base_matrix(self._Y_base)
+
+    def clear_cache(self):
+        """Frees the base matrix memory cache."""
+        if hasattr(self, '_Y_base'):
+            del self._Y_base
+
+    def build_system(self, domain="static", t=0.0, dt=0.0, w=0.0, v_prev=None, v_k=None, method="TR", base_matrix=None):
+        """The Master Composer. Assembles the global matrix and RHS vector dynamically."""
+
+        if not hasattr(self, '_Y_base'):
+            self.precompute_base()
+
+        Y = base_matrix.copy() if base_matrix is not None else self._Y_base.copy()
+        if domain == "frequency" and Y.dtype != complex: Y = Y.astype(complex)
+        J = np.zeros(self.total_dim, dtype=complex if domain=="frequency" else float)
+        
+        # 1. Independent Sources (Always stamp RHS)
+        for comp in self._src_comps:
+            comp.stamp_sources(J, domain, t)
+                
+        # 2. Dynamic/Non-Linear Components (The Unified Pipeline)
+        # We group all components that need dynamic evaluation into one list
+        dynamic_comps = []
+        if domain == "time": dynamic_comps.extend(self._tran_comps)
+        if domain == "frequency": dynamic_comps.extend(self._ac_comps)
+        if self.is_nonlinear and v_k is not None: dynamic_comps.extend(self._nl_comps)
+        
+        # Deduplicate in case a component is both transient AND nonlinear (like a dynamic MOSFET)
+        dynamic_comps = list(set(dynamic_comps))
+
+        for comp in dynamic_comps:
+            # 1. Evaluate Physics ONCE
+            res = comp.evaluate_physics(domain=domain, t=t, dt=dt, w=w, v_prev=v_prev, v_k=v_k, method=method)
+            
+            # 2. Generic Stamping
+            comp.stamp_matrix(Y, res)
+            comp.stamp_rhs(J, res)
+                
+        return Y, J
+
+    def build_rhs_only(self, domain="static", t=0.0, dt=0.0, w=0.0, v_prev=None, v_k=None, method="TR"):
+        """
+        Blazing-fast extraction of ONLY the Right-Hand Side (J/Sources) vector.
+        Completely bypasses matrix allocation (Used by Woodbury Strategy).
+        """
+        J = np.zeros(self.total_dim, dtype=complex if domain=="frequency" else float)
+            
+        # 1. Independent Sources
+        for comp in self._src_comps:
+            comp.stamp_sources(J, domain, t)
+                
+        # 2. Dynamic/Non-Linear Components (The Unified Pipeline)
+        dynamic_comps = []
+        if domain == "time": dynamic_comps.extend(self._tran_comps)
+        if domain == "frequency": dynamic_comps.extend(self._ac_comps)
+        if self.is_nonlinear and v_k is not None: dynamic_comps.extend(self._nl_comps)
+        
+        # Deduplicate
+        dynamic_comps = list(set(dynamic_comps))
+
+        for comp in dynamic_comps:
+            # 1. Evaluate Physics ONCE
+            res = comp.evaluate_physics(domain=domain, t=t, dt=dt, w=w, v_prev=v_prev, v_k=v_k, method=method)
+            
+            # 2. Generic Stamping (RHS ONLY)
+            comp.stamp_rhs(J, res)
+                
+        return J

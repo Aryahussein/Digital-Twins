@@ -1,21 +1,31 @@
-* 3-Stage NMOS Ring Oscillator
-VDD 5 0 PULSE(0 5 1n 1n 1n 10m 20m)
+* 3-Stage CMOS Ring Oscillator
+* Nodes: VDD (1), GND (0), Stage1 (n1), Stage2 (n2), Stage3 (n3)
 
-* Stage 1 Inverter + Load Cap
-R1 5 1 5k
-M1 1 3 0 0 NMOS W=100u L=1u
-C1 1 0 10pF
+* Power Supply (1.8V)
+VDD 1 0 1.8
 
-* Stage 2 Inverter + Load Cap
-R2 5 2 5k
-M2 2 1 0 0 NMOS W=100u L=1u
-C2 2 0 10pF
+* Stage 1: n3 -> n1
+M1_P n1 n3 1 1 PMOS W=2u L=0.18u
+M1_N n1 n3 0 0 NMOS W=1u L=0.18u
+C1 n1 0 100f
 
-* Stage 3 Inverter + Load Cap
-R3 5 3 5k
-M3 3 2 0 0 NMOS W=100u L=1u
-C3 3 0 10pF
+* Stage 2: n1 -> n2
+M2_P n2 n1 1 1 PMOS W=2u L=0.18u
+M2_N n2 n1 0 0 NMOS W=1u L=0.18u
+C2 n2 0 100f
 
-.model NMOS NMOS(Vto=1.0 Kp=20u)
-.tran 1u 1m
-.end
+* Stage 3: n2 -> n3
+M3_P n3 n2 1 1 PMOS W=2u L=0.18u
+M3_N n3 n2 0 0 NMOS W=1u L=0.18u
+C3 n3 0 100f
+
+.MODEL NMOS NMOS (LEVEL=1 VTO=0.4 KP=170u GAMMA=0.5 LAMBDA=0.1 PHI=0.7)
+.MODEL PMOS PMOS (LEVEL=1 VTO=-0.4 KP=50u GAMMA=0.5 LAMBDA=0.1 PHI=0.7)
+
+* The Kickstart: Force node n1 to 0V at t=0
+.IC V(n1)=0
+
+* Analyses
+.TRAN 10p 5n
+.OP
+

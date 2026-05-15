@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Time‑Domain Waveform Module &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="AC Analysis Engine" href="ac_engine.html" />
+    <link rel="prev" title="Simulation Result &amp; Sensitivity Data" href="results.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="timedomain-waveform-module">
+<span id="waveforms-module"></span><h1>Time‑Domain Waveform Module<a class="headerlink" href="#timedomain-waveform-module" title="Link to this heading">¶</a></h1>
+<p>This module implements a small library of transient source generators that are used during
+transient analysis.  It supports the common SPICE waveforms <strong>PULSE</strong>, <strong>SIN/SINE/COS</strong> and <strong>PWL</strong>
+( Piece‑Wise Linear ).  The <a class="reference internal" href="#Waveform" title="Waveform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Waveform</span></code></a> class parses the user‑supplied dictionary,
+stores the waveform type, and evaluates the instantaneous voltage or current at any time <cite>t</cite>.</p>
+<hr class="docutils" />
+<dl class="py class">
+<dt class="sig sig-object py" id="Waveform">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source_dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#Waveform" title="Link to this definition">¶</a></dt>
+<dd><p>Evaluates time‑domain source functions for transient simulations.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="Waveform.type">
+<span class="sig-name descname"><span class="pre">type</span></span><a class="headerlink" href="#Waveform.type" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">str</span></code> – The waveform type identifier (e.g. <code class="docutils literal notranslate"><span class="pre">'PULSE'</span></code>, <code class="docutils literal notranslate"><span class="pre">'SIN'</span></code>, <code class="docutils literal notranslate"><span class="pre">'COS'</span></code>, <code class="docutils literal notranslate"><span class="pre">'PWL'</span></code>).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="Waveform.params">
+<span class="sig-name descname"><span class="pre">params</span></span><a class="headerlink" href="#Waveform.params" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">dict</span></code> – All parameters that define the waveform shape, as parsed from a SPICE netlist.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="Waveform.get_value">
+<span class="sig-name descname"><span class="pre">get_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#Waveform.get_value" title="Link to this definition">¶</a></dt>
+<dd><p>Computes the instantaneous value of the source at simulation time <cite>t</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>t</strong> (<em>float</em>) – Current simulation time in seconds.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">float</span></code> – Instantaneous voltage (V) or current (A).</p>
+</dd>
+</dl>
+<p>The implementation supports the following waveform types:</p>
+<ul class="simple">
+<li><p><strong>PULSE</strong>
+Parameters: <code class="docutils literal notranslate"><span class="pre">V1,</span> <span class="pre">V2,</span> <span class="pre">TD,</span> <span class="pre">TR,</span> <span class="pre">TF,</span> <span class="pre">PW,</span> <span class="pre">PER</span></code>
+Returns a piecewise linear pulse with optional rise/fall times.</p></li>
+<li><p><strong>SIN / SINE / COS</strong>
+Parameters: <code class="docutils literal notranslate"><span class="pre">VOFF,</span> <span class="pre">VAMP,</span> <span class="pre">FREQ,</span> <span class="pre">PHASE</span></code> (phase is supplied in degrees).
+Returns either a sine or cosine waveform depending on the type string.</p></li>
+<li><p><strong>PWL</strong>
+Parameter: <code class="docutils literal notranslate"><span class="pre">TIME_VOLTAGE_PAIRS</span></code> – list of <code class="docutils literal notranslate"><span class="pre">(time,</span> <span class="pre">voltage)</span></code> tuples.
+Uses <code class="xref py py-func docutils literal notranslate"><span class="pre">numpy.interp()</span></code> for linear interpolation between points.</p></li>
+<li><p><strong>Static / Unknown</strong> – falls back to the value stored in <code class="docutils literal notranslate"><span class="pre">params['value']</span></code> (defaults to 0).</p></li>
+</ul>
+</dd></dl>
+
+</dd></dl>
+
+<hr class="docutils" />
+<section id="example-usage">
+<h2>Example usage<a class="headerlink" href="#example-usage" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">waveforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Waveform</span>
+
+<span class="c1"># PULSE example</span>
+<span class="n">pulse</span> <span class="o">=</span> <span class="n">Waveform</span><span class="p">({</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;PULSE&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;V1&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">&quot;V2&quot;</span><span class="p">:</span> <span class="mf">5.0</span><span class="p">,</span>
+    <span class="s2">&quot;TD&quot;</span><span class="p">:</span> <span class="mf">1e-6</span><span class="p">,</span>
+    <span class="s2">&quot;TR&quot;</span><span class="p">:</span> <span class="mf">10e-9</span><span class="p">,</span>
+    <span class="s2">&quot;TF&quot;</span><span class="p">:</span> <span class="mf">10e-9</span><span class="p">,</span>
+    <span class="s2">&quot;PW&quot;</span><span class="p">:</span> <span class="mf">100e-9</span><span class="p">,</span>
+    <span class="s2">&quot;PER&quot;</span><span class="p">:</span> <span class="mf">200e-9</span>
+<span class="p">})</span>
+
+<span class="n">voltage_at_t</span> <span class="o">=</span> <span class="n">pulse</span><span class="o">.</span><span class="n">get_value</span><span class="p">(</span><span class="mf">5e-7</span><span class="p">)</span>  <span class="c1"># -&gt; 5.0 V</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Time‑Domain Waveform Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Waveform"><code class="docutils literal notranslate"><span class="pre">Waveform</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-usage">Example usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="results.html" title="previous chapter">Simulation Result &amp; Sensitivity Data</a></li>
+      <li>Next: <a href="ac_engine.html" title="next chapter">AC Analysis Engine</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/waveforms.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -7,7 +7,11 @@ class OpAmp(Component):
     V(out, gnd) = Gain * (V(n_plus) - V(n_minus))
     """
 
-    IS_NONLINEAR = True
+    REQUIRES_BRANCH_EQ = True
+    
+    # Base class Woodbury targets:
+    SHIFT_KEY = "gain"
+    SHIFT_MULTIPLIER = -1.0  # Gain acts inversely in the KVL branch equation
 
     def bind_nodes(self, node_map):
         # Input terminals
@@ -23,36 +27,52 @@ class OpAmp(Component):
         # High open-loop gain (default 100k if not specified)
         self.gain = self.data.get("value", 1e5)
 
-    def stamp_mna_connection(self, Y):
+    # ==========================================
+    # 1. THE PHYSICS EVALUATOR
+    # ==========================================
+    def evaluate_physics(self, v_k=None, overrides=None, **kwargs):
+        """Calculates the effective open-loop gain using absolute overrides."""
+        overrides = overrides or {}
+        
+        # PURE PHYSICS: Use override if it exists, otherwise use nominal
+        eff_gain = overrides.get(self.name, self.gain)
+        
+        return {"gain": eff_gain}
+
+    # ==========================================
+    # 2. STATIC STAMPING (Skeleton Matrix)
+    # ==========================================
+    def stamp_base_matrix(self, Y):
         """
-        Stamps the VCVS MNA equations.
+        Phase 1: Stamps the time/voltage-invariant VCVS MNA equations.
         Equation: V_out - Gain*(V_p - V_m) = 0
         """
-        if self.branch_idx is None: return
+        b = self.branch_idx
+        if b is None: return
 
-        # 1. Output current flows into the output node
+        # 1. Output terminal current assignment (KVL / KCL intersection)
+        # Current flows OUT of idx_out, through the branch, to ground.
         if self.idx_out is not None:
-            Y[self.idx_out, self.branch_idx] += 1.0
-            Y[self.branch_idx, self.idx_out] += 1.0
+            Y[self.idx_out, b] += 1.0  # Branch current leaves the output node
+            Y[b, self.idx_out] += 1.0  # V_out term in the branch equation
+
+        # Ask evaluate_physics for the nominal gain
+        res = self.evaluate_physics()
+        gain = res.get("gain", 0.0)
 
         # 2. Control voltage dependencies in the branch row
         if self.idx_p is not None:
-            Y[self.branch_idx, self.idx_p] -= self.gain
+            Y[b, self.idx_p] -= gain
         if self.idx_m is not None:
-            Y[self.branch_idx, self.idx_m] += self.gain
+            Y[b, self.idx_m] += gain
 
-    # def stamp_static(self, Y, sources):
-    #     # RHS for an ideal Op-Amp is typically 0 (homogeneous equation)
-    #     if self.branch_idx is not None:
-    #         sources[self.branch_idx] = 0.0
-
-    # # AC and Transient inherit from static
-    # def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
-    # def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
-
+    # ==========================================
+    # 3. SENSITIVITY & WOODBURY ENGINES
+    # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
-        """Calculates sensitivity w.r.t Open-Loop Gain (A)."""
-        if self.branch_idx is None: return {}
+        """Calculates exact sensitivity w.r.t Open-Loop Gain (A)."""
+        b = self.branch_idx
+        if b is None: return {}
 
         # Forward differential input
         vp = VI[self.idx_p] if self.idx_p is not None else 0.0
@@ -60,7 +80,25 @@ class OpAmp(Component):
         v_diff = vp - vm
 
         # Adjoint branch variable
-        psi_branch = PsiPhi[self.branch_idx]
+        psi_branch = PsiPhi[b]
 
-        # Adjoint formula: Psi_branch * (V_plus - V_minus)
+        # Note: Because dY/dGain is -1.0, the adjoint math resolves to positive
         return {self.name: psi_branch * v_diff}
+
+    def stamp_PQ(self, P, Q, start_col_idx):
+        """Stamps the VCVS topology for Woodbury updates.
+        
+        Injection (P): The auxiliary branch equation row.
+        Extraction (Q): The differential input voltage (V_plus - V_minus).
+        """
+        b = self.branch_idx
+        p, m = self.idx_p, self.idx_m
+        
+        # P: The gain parameter lives entirely inside the KVL branch equation row
+        if b is not None: 
+            P[b, start_col_idx] = 1.0
+            
+        # Q: The state variable multiplying the gain is (V_plus - V_minus)
+        if p is not None: Q[p, start_col_idx] = 1.0
+        if m is not None: Q[m, start_col_idx] = -1.0
+

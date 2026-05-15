@@ -3,14 +3,36 @@ from .base import Component
 class VCCS(Component):
     """Voltage-Controlled Current Source (Type 'G'). I = G * (V_pos - V_neg)."""
 
+    # Tells the Base Class time-travel function which dictionary key to extract
+    SHIFT_KEY = "gm"
+
     def bind_nodes(self, node_map):
         self.idx_1 = node_map.get(self.data.get("n1", 0)) # Output +
         self.idx_2 = node_map.get(self.data.get("n2", 0)) # Output -
         self.idx_3 = node_map.get(self.data.get("n3", 0)) # Control +
         self.idx_4 = node_map.get(self.data.get("n4", 0)) # Control -
 
-    def stamp_static(self, Y):
-        g = self.value # The transconductance
+    # ==========================================
+    # 1. THE PHYSICS EVALUATOR
+    # ==========================================
+    def evaluate_physics(self, v_k=None, overrides=None, **kwargs):
+        """Calculates the effective transconductance using absolute overrides."""
+        overrides = overrides or {}
+        
+        # PURE PHYSICS: Use override if it exists, otherwise use nominal
+        eff_gm = overrides.get(self.name, self.value)
+        
+        return {"gm": eff_gm}
+
+    # ==========================================
+    # 2. STATIC STAMPING (Skeleton Matrix)
+    # ==========================================
+    def stamp_base_matrix(self, Y):
+        """Phase 1: Stamps time/voltage-invariant transconductance into the skeleton matrix."""
+        # Ask evaluate_physics for the nominal transconductance
+        res = self.evaluate_physics()
+        g = res.get("gm", 0.0)
+        
         i, j, k, l = self.idx_1, self.idx_2, self.idx_3, self.idx_4
         
         # Current out of node i depends on (Vk - Vl)
@@ -23,10 +45,9 @@ class VCCS(Component):
             if k is not None: Y[j, k] -= g
             if l is not None: Y[j, l] += g
 
-    # AC and Transient inherit from static as the gain is frequency independent.
-    # def stamp_ac(self, Y, sources, w): self.stamp_static(Y, sources)
-    # def stamp_transient(self, Y, sources, t, dt, v_prev): self.stamp_static(Y, sources)
-
+    # ==========================================
+    # 3. SENSITIVITY & WOODBURY ENGINES
+    # ==========================================
     def get_sensitivities(self, VI, PsiPhi, **kwargs):
         """
         Calculates sensitivity w.r.t the Transconductance (G).
@@ -43,7 +64,22 @@ class VCCS(Component):
         psi_output = p1 - p2
 
         # 3. Sensitivity is the product of the control voltage and the adjoint output
-        # Note the negative sign: it comes from the MNA matrix derivative
+        # Note the negative sign: it comes from the MNA matrix derivative (dY/dG = 1.0)
         sens_g = -(psi_output * v_control)
 
         return {self.name: sens_g}
+
+    def stamp_PQ(self, P, Q, start_col_idx):
+        """Stamps the VCCS topology for Woodbury updates. 
+        
+        Injection (P): Output Nodes. 
+        Extraction (Q): Control Nodes.
+        """
+        out1, out2 = self.idx_1, self.idx_2
+        c1, c2 = self.idx_3, self.idx_4 
+        
+        if out1 is not None: P[out1, start_col_idx] = 1.0
+        if out2 is not None: P[out2, start_col_idx] = -1.0
+        if c1 is not None: Q[c1, start_col_idx] = 1.0
+        if c2 is not None: Q[c2, start_col_idx] = -1.0
+

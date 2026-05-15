@@ -1,0 +1,32 @@
+* --- Optimized DRAM Netlist ---
+* Transistor: Sized for high current to charge the smaller cap quickly
+M1 BL WL SN 0 MMOD L=0.18u W=2u
+
+* Storage Capacitor: 100fF is typical for high-density DRAM
+* This allows the voltage to swing quickly during your pulses.
+C_storage SN 0 100fF
+
+* Leakage Resistor: Adjusted to see visible decay over 25us
+* 100Meg gives a time constant (RC) of 10ms. 
+* 10Meg gives a time constant of 1ms. 
+R_leak SN 0 10Meg
+
+* --- NMOS Model ---
+.MODEL MMOD NMOS (VTO=0.7 KP=200u)
+
+* --- Signals for Full Life-Cycle (Write 1 -> Hold -> Write 0) ---
+* BL: High for 10us (to write 1), then Low for 10us (to write 0)
+V_BL BL 0 PULSE(0 5 0 80n 0n 10u 20u)
+
+* WL: Pulse twice. 
+* Once at 1us to store the '1'. 
+* Once at 12us to clear it ('Write 0').
+V_WL WL 0 PWL(0 0 1u 0 1.3u 5 3u 5 3.3u 0 12u 0 12.3u 5 14u 5 14.3u 0)
+
+* --- Simulation ---
+.TRAN 10n 10u
+
+
+
+
+

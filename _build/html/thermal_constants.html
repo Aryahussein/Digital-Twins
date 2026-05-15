@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Thermal Voltage Helper &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Diode &amp; NMOS Level‑1 Models" href="diode_mosfet_models.html" />
+    <link rel="prev" title="Circuit Representation Module" href="circuit.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="thermal-voltage-helper">
+<span id="thermal-constants"></span><h1>Thermal Voltage Helper<a class="headerlink" href="#thermal-voltage-helper" title="Link to this heading">¶</a></h1>
+<p>This tiny module simply pulls constants from <code class="xref py py-mod docutils literal notranslate"><span class="pre">scipy.constants</span></code> and
+computes the thermal voltage at room temperature (298 K).  It is handy for
+any SPICE‑style circuit simulation that needs <code class="docutils literal notranslate"><span class="pre">Vt</span></code>.</p>
+<dl class="py data">
+<dt class="sig sig-object py" id="e">
+<span class="sig-name descname"><span class="pre">e</span></span><span class="property"><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#e" title="Link to this definition">¶</a></dt>
+<dd><p>Elementary charge in coulombs – imported as <code class="docutils literal notranslate"><span class="pre">c.e</span></code> from SciPy.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="kb">
+<span class="sig-name descname"><span class="pre">kb</span></span><span class="property"><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#kb" title="Link to this definition">¶</a></dt>
+<dd><p>Boltzmann constant (J K⁻¹) – imported as <code class="docutils literal notranslate"><span class="pre">c.k</span></code>.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="T">
+<span class="sig-name descname"><span class="pre">T</span></span><span class="property"><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#T" title="Link to this definition">¶</a></dt>
+<dd><p>Reference temperature in kelvin (default 298.15 K).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="Vt">
+<span class="sig-name descname"><span class="pre">Vt</span></span><span class="property"><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#Vt" title="Link to this definition">¶</a></dt>
+<dd><p>Thermal voltage, computed as <code class="docutils literal notranslate"><span class="pre">(kb</span> <span class="pre">*</span> <span class="pre">T)</span> <span class="pre">/</span> <span class="pre">e</span></code> (~26 mV at room temperature).</p>
+</dd></dl>
+
+<section id="usage-example">
+<h2>Usage example<a class="headerlink" href="#usage-example" title="Link to this heading">¶</a></h2>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">thermal_constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">Vt</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Vt</span>
+<span class="go">0.025851999...</span>
+</pre></div>
+</div>
+<p>The module is intentionally lightweight; if you need a different temperature,
+edit <a class="reference internal" href="#T" title="T"><code class="xref py py-data docutils literal notranslate"><span class="pre">T</span></code></a> or recompute <a class="reference internal" href="#Vt" title="Vt"><code class="xref py py-data docutils literal notranslate"><span class="pre">Vt</span></code></a> manually.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Thermal Voltage Helper</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#e"><code class="docutils literal notranslate"><span class="pre">e</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#kb"><code class="docutils literal notranslate"><span class="pre">kb</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#T"><code class="docutils literal notranslate"><span class="pre">T</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Vt"><code class="docutils literal notranslate"><span class="pre">Vt</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#usage-example">Usage example</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ac_engine.html">AC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="circuit.html" title="previous chapter">Circuit Representation Module</a></li>
+      <li>Next: <a href="diode_mosfet_models.html" title="next chapter">Diode &amp; NMOS Level‑1 Models</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/thermal_constants.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

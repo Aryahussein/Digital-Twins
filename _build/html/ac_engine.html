@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>AC Analysis Engine &#8212; Digital Twins Course EDA 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="DC Analysis Engine" href="dc_engine.html" />
+    <link rel="prev" title="Time‑Domain Waveform Module" href="waveforms.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="ac-analysis-engine">
+<span id="ac-engine-module"></span><h1>AC Analysis Engine<a class="headerlink" href="#ac-analysis-engine" title="Link to this heading">¶</a></h1>
+<p>This module implements <a class="reference internal" href="#ACEngine" title="ACEngine"><code class="xref py py-class docutils literal notranslate"><span class="pre">ACEngine</span></code></a>, which performs small‑signal frequency domain simulations.
+The routine linearises all nonlinear components around a supplied DC operating point,
+then sweeps the specified frequency range to compute complex phasors at every node.</p>
+<hr class="docutils" />
+<dl class="py class">
+<dt class="sig sig-object py" id="ACEngine">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ACEngine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">circuit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_nonlinear</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ACEngine" title="Link to this definition">¶</a></dt>
+<dd><p>Core class that runs AC sweeps.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="ACEngine.circuit">
+<span class="sig-name descname"><span class="pre">circuit</span></span><a class="headerlink" href="#ACEngine.circuit" title="Link to this definition">¶</a></dt>
+<dd><p><code class="xref py py-class docutils literal notranslate"><span class="pre">Circuit</span></code> – The fully populated circuit object.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="ACEngine.is_nonlinear">
+<span class="sig-name descname"><span class="pre">is_nonlinear</span></span><a class="headerlink" href="#ACEngine.is_nonlinear" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">bool</span></code> – True if the circuit contains nonlinear devices (diodes,
+MOSFETs, etc.) that must be linearised at each bias point.</p>
+</dd></dl>
+
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py method">
+<dt class="sig sig-object py" id="ACEngine._solve_single_point">
+<span class="sig-prename descclassname"><span class="pre">ACEngine.</span></span><span class="sig-name descname"><span class="pre">_solve_single_point</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">w</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Y_small_signal_base</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ACEngine._solve_single_point" title="Link to this definition">¶</a></dt>
+<dd><p>Internal helper that solves the AC circuit for a single angular frequency.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<dl>
+<dt>w<span class="classifier">float</span></dt><dd><p>Angular frequency (rad/s) = 2π·f.</p>
+</dd>
+<dt>Y_small_signal_base<span class="classifier"><code class="xref py py-class docutils literal notranslate"><span class="pre">scipy.sparse.lil_matrix</span></code></span></dt><dd><p>Pre‑linearised admittance matrix that already contains static resistors
+and the linearised conductances of any nonlinear devices.</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>tuple</dt><dd><p><code class="docutils literal notranslate"><span class="pre">(lu_factorization,</span> <span class="pre">VI_complex_array)</span></code> – LU factorisation object and the
+complex solution vector at this frequency.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">ACEngine.run(Y_base_lil,</span> <span class="pre">VI_dc,</span> <span class="pre">start_freq,</span> <span class="pre">stop_freq,</span> <span class="pre">points,</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">sweep_type=&quot;DEC&quot;,</span> <span class="pre">keep_lus=False)</span></span></dt>
+<dd><p>Executes an AC frequency sweep.</p>
+<section id="id1">
+<h2>Parameters<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<dl>
+<dt>Y_base_lil<span class="classifier"><code class="xref py py-class docutils literal notranslate"><span class="pre">scipy.sparse.lil_matrix</span></code></span></dt><dd><p>Static base admittance matrix (time‑invariant part of the circuit).</p>
+</dd>
+<dt>VI_dc<span class="classifier"><code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></span></dt><dd><p>DC operating point vector that was previously computed.</p>
+</dd>
+<dt>start_freq, stop_freq<span class="classifier">float</span></dt><dd><p>Sweep bounds in hertz.</p>
+</dd>
+<dt>points<span class="classifier">int</span></dt><dd><p>Number of frequency samples to generate.</p>
+</dd>
+<dt>sweep_type<span class="classifier">str, optional</span></dt><dd><p><code class="docutils literal notranslate"><span class="pre">&quot;DEC&quot;</span></code> (logarithmic), <code class="docutils literal notranslate"><span class="pre">&quot;LIN&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;OCT&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;LIST&quot;</span></code>.  Default is <code class="docutils literal notranslate"><span class="pre">&quot;DEC&quot;</span></code>.</p>
+</dd>
+<dt>keep_lus<span class="classifier">bool, optional</span></dt><dd><p>If True, caches the LU factorisation for every frequency point – required by
+the adjoint sensitivity engine.</p>
+</dd>
+</dl>
+</section>
+<section id="id2">
+<h2>Returns<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>tuple</dt><dd><p><code class="docutils literal notranslate"><span class="pre">(frequencies,</span> <span class="pre">VIs,</span> <span class="pre">list_of_lus)</span></code></p>
+<ul class="simple">
+<li><p><strong>frequencies</strong> – 1‑D array of sweep frequencies.</p></li>
+<li><p><strong>VIs</strong> – 2‑D array (n_frequencies × n_nodes) containing complex phasors.</p></li>
+<li><p><strong>list_of_lus</strong> – Optional list of LU objects, one per frequency.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>The routine first “bakes” the small‑signal conductances into a base matrix
+(<cite>Y_small_signal_base</cite>) once.  This optimisation avoids re‑stamping at every
+frequency step.</p></li>
+<li><p>For nonlinear circuits it calls each component’s
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">stamp_nonlinear()</span></code> with the DC bias vector.</p></li>
+</ul>
+</section>
+</dd></dl>
+
+<hr class="docutils" />
+<section id="example-usage">
+<h2>Example usage<a class="headerlink" href="#example-usage" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">core.circuit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Circuit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ac_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">ACEngine</span>
+
+<span class="n">engine</span> <span class="o">=</span> <span class="n">ACEngine</span><span class="p">(</span><span class="n">circuit</span><span class="p">,</span> <span class="n">is_nonlinear</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">freqs</span><span class="p">,</span> <span class="n">results</span><span class="p">,</span> <span class="n">luts</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+    <span class="n">Y_base_lil</span><span class="o">=</span><span class="n">Y_base</span><span class="p">,</span>
+    <span class="n">VI_dc</span><span class="o">=</span><span class="n">dc_solution</span><span class="p">,</span>
+    <span class="n">start_freq</span><span class="o">=</span><span class="mf">1e3</span><span class="p">,</span>
+    <span class="n">stop_freq</span><span class="o">=</span><span class="mf">1e6</span><span class="p">,</span>
+    <span class="n">points</span><span class="o">=</span><span class="mi">100</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Digital Twins Course EDA</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="simulation_core.html">Main Execution Script</a></li>
+<li class="toctree-l1"><a class="reference internal" href="circuit.html">Circuit Representation Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermal_constants.html">Thermal Voltage Helper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="diode_mosfet_models.html">Diode &amp; NMOS Level‑1 Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Simulation Result &amp; Sensitivity Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="waveforms.html">Time‑Domain Waveform Module</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">AC Analysis Engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ACEngine"><code class="docutils literal notranslate"><span class="pre">ACEngine</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ACEngine._solve_single_point"><code class="docutils literal notranslate"><span class="pre">ACEngine._solve_single_point()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-usage">Example usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dc_engine.html">DC Analysis Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adjoint_engine.html">Adjoint Sensitivity Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gui.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parser.html">SPICE Netlist Parser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">Simulation Plotting Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fault_analysis.html">Fault Analysis Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="large_change_sensitivity.html">Large‑Change Sensitivity Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_base.html">Circuit Component Base Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component_capacitor.html">Capacitor Component</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="waveforms.html" title="previous chapter">Time‑Domain Waveform Module</a></li>
+      <li>Next: <a href="dc_engine.html" title="next chapter">DC Analysis Engine</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/ac_engine.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
