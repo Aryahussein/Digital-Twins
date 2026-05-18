@@ -73,7 +73,11 @@ class DCEngine:
         print(f"\n--- Starting DC Sweep ({len(sweep_axis)} points) ---")
 
         current_guess = np.zeros(self.circuit.total_dim)
+        # param_name = f"{source_name}_value"
         param_name = f"{source_name}_value"
+        if param_name not in self.circuit.param_to_component_map:
+            param_name = source_name
+
 
         with TemporaryCircuitState(self.circuit, self.circuit.param_to_component_map, {param_name: start}):
             

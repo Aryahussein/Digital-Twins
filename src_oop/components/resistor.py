@@ -24,6 +24,19 @@ class Resistor(Component):
             
         return {"g_eq": 1.0 / eff_r}
 
+    # In resistor.py, add this method:
+    def stamp_base_matrix(self, Y):
+        """Stamps the static conductance into the skeleton matrix."""
+        res = self.evaluate_physics()
+        g = res.get("g_eq", 0.0)
+        if g == 0.0:
+            return
+        if self.idx_1 is not None: Y[self.idx_1, self.idx_1] += g
+        if self.idx_2 is not None: Y[self.idx_2, self.idx_2] += g
+        if self.idx_1 is not None and self.idx_2 is not None:
+            Y[self.idx_1, self.idx_2] -= g
+            Y[self.idx_2, self.idx_1] -= g
+
     # ==========================================
     # 2. SENSITIVITY ENGINES
     # ==========================================

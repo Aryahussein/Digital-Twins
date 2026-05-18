@@ -71,7 +71,7 @@ def run_simulation_core(
     parser = NetlistParser()
     raw_components, analyses = parser.parse(netlist_path)
 
-    print(analyses)
+    # print(analyses)
 
     # 2. Construct the Object-Oriented Circuit
     circuit = Circuit(raw_components)
@@ -90,23 +90,13 @@ def run_simulation_core(
 
 
 if __name__ == "__main__":
-    
-    # =========================================================================
-    # 1. CONFIGURATION & SETTINGS
-    # =========================================================================
-    # netlist = "ring_oscilator"  # e.g., nmos_inverter, 1T1C_dram_cell
-    #
-    # plot_nodes = ["n1", "n2", "n3"]
-    # output_nodes = ["n3"]
-    # target_node = "n3"
-    # target_parameter = "M3_W"
 
-    netlist = "CMOS_inverter_CAP"  # e.g., nmos_inverter, 1T1C_dram_cell
+    netlist = "rc_transient"  # e.g., nmos_inverter, 1T1C_dram_cell
 
-    plot_nodes = ["IN", "OUT"]
-    output_nodes = ["OUT"]
-    target_node = "OUT"
-    target_parameter = "CL"
+    plot_nodes = ["out"]
+    output_nodes = ["out"] 
+    target_node = "out"
+    target_parameter = "C1"
     
     file_path = f"../testfiles/{netlist}.txt"
     # --- Application Toggles ---
@@ -116,8 +106,8 @@ if __name__ == "__main__":
     plot_sensitivity = True    # Plots the dV/dp curves
     
     radiation_sim = False      # Specific transient radiation feature
-    fault_analysis = False     # Component Ranking and Thresholding
-    yield_analysis = True      # SDWC Woodbury analysis
+    fault_analysis = False    # Component Ranking and Thresholding
+    yield_analysis = False      # SDWC Woodbury analysis
 
     # --- Yield Analysis Settings ---
     # Set to an integer (e.g., 50) to evaluate a specific step, or None for Auto
@@ -167,25 +157,56 @@ if __name__ == "__main__":
         elif analysis_key == ".DC":
             plot_dc_sweep(result, output_nodes=plot_nodes, folder=out_dir, name=base_name)
 
+
     # =========================================================================
     # 4. SENSITIVITY POST-PROCESSING
     # =========================================================================
     calculated_params = result.get_sensitivity_parameters(target_node) if result.sensitivities else []
 
     if calculated_params:
-        print(f"\n=== SENSITIVITIES FOR V({target_node}) ===")
-        
-        # Print OP values or TRAN integrated values
-        if analysis_key == ".OP":
-            for param in calculated_params:
-                sens_val = result.get_sensitivity(target_node, param)
-                print(f"  d({target_node})/d({param}) = {sens_val:+.6e}")
+        sens = result.sensitivities
 
-        elif analysis_key == ".TRAN" and result.global_sensitivities:
+        # --- Print cube info ---
+        print(f"\n=== SENSITIVITY CUBE INFO ===")
+        print(f"  Shape: {sens.data.shape}  (Parameters x Outputs x Sweep Steps)")
+        print(f"  Parameters: {sens.param_names}")
+        print(f"  Outputs: {sens.output_nodes}")
+        print(f"  Sweep Steps: {len(sens.sweep_axis)}")
+
+        # --- Print instantaneous sensitivity table ---
+        if analysis_key == ".OP":
+            print(f"\n=== INSTANTANEOUS SENSITIVITIES (Operating Point) ===")
+            sens.print_matrix_at_step(0, target_node, calculated_params)
+
+        elif analysis_key == ".TRAN":
+            last_step = len(result.sweep_axis) - 1
+            print(f"\n=== INSTANTANEOUS SENSITIVITIES (Final Time Step) ===")
+            sens.print_matrix_at_step(last_step, target_node, calculated_params)
+
+        elif analysis_key == ".AC":
+            last_step = len(result.sweep_axis) - 1
+            print(f"\n=== INSTANTANEOUS SENSITIVITIES (Final Frequency) ===")
+            sens.print_matrix_at_step(last_step, target_node, calculated_params)
+
+        elif analysis_key == ".DC":
+            mid_step = len(result.sweep_axis) // 2
+            print(f"\n=== INSTANTANEOUS SENSITIVITIES (Mid Sweep Point) ===")
+            sens.print_matrix_at_step(mid_step, target_node, calculated_params)
+
+        # --- Export full 3D tensor to CSV ---
+        import os
+        os.makedirs(out_dir, exist_ok=True)
+        csv_path = f"{out_dir}/{base_name}_sensitivities.csv"
+        sens.export_to_csv(csv_path)
+        print(f"\n  Full sensitivity tensor exported to: {csv_path}")
+
+        # --- Print Global Backward Adjoint (TRAN only, optional) ---
+        if analysis_key == ".TRAN" and result.global_sensitivities:
+            print(f"\n=== GLOBAL BACKWARD ADJOINT (Integrated over full transient) ===")
             for param in calculated_params:
                 val = result.global_sensitivities["Integrated_Transient"][target_node].get(param, 0.0)
-                print(f"  {param:<15} : {val:+.6e} (Integrated)")
-                
+                print(f"  {param:<15} : {val:+.6e}")
+
         # --- Plot Sensitivities ---
         if plot_sensitivity and target_parameter in calculated_params:
             if analysis_key == ".TRAN":
@@ -201,6 +222,21 @@ if __name__ == "__main__":
                 plot_ac_sensitivity(result, target_node, target_parameter, folder=out_dir, name=f"{base_name}_sens")
             elif analysis_key == ".DC":
                 plot_dc_sensitivity(result, target_node, target_parameter, folder=out_dir, name=f"{base_name}_sens")
+
+
+
+        # --- Find Exact Inflection Point ---
+    # if analysis_key == ".DC" and calculated_params:
+    #     sens_array = result.get_sensitivity(target_node, target_parameter)
+    #     if sens_array is not None:
+    #         sweep = result.sweep_axis
+    #         inflection_idx = np.argmin(sens_array)
+    #         print(f"\n=== INFLECTION POINT ===")
+    #         print(f"Input voltage: {sweep[inflection_idx]:.4f} V")
+    #         print(f"Peak gain: {sens_array[inflection_idx]:.2f}")
+    #         print(f"Vout at inflection: {result.get_voltage(target_node)[inflection_idx]:.4f} V")
+    # DO SOME KIND OF OPTIMIZATION WHERE SECOND DERIVATIVE IS ZERO
+
 
     # =========================================================================
     # 5. FAULT ANALYSIS

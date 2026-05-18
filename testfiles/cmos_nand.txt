@@ -1,0 +1,38 @@
+* CMOS 2-Input NAND Gate
+* Razavi 180nm Parameters: VDD=1.8V, KP_N=100u, KP_P=50u, VTO_N=0.4, VTO_P=0.5
+* NMOS: W/L = 4u/0.18u (doubled for series stack)
+* PMOS: W/L = 3u/0.18u
+
+* === Power Supply ===
+VDD vdd 0 DC 1.8
+
+* === Inputs ===
+* For DC sweep: sweep VA while holding VB high
+*VA a 0 DC 0.9
+*VB b 0 DC 1.8
+
+*sweep VB while holding VA high
+VA a 0 DC 1.8
+VB b 0 DC 0.9
+
+* === PMOS Pull-Up Network (parallel) ===
+* M_name  Drain  Gate  Source  Body  Model  W=  L=
+M3 vdd a out vdd PMOD W=3u L=0.18u
+M4 vdd b out vdd PMOD W=3u L=0.18u
+
+* === NMOS Pull-Down Network (series) ===
+* M1 is bottom (closer to ground), M2 is top (closer to output)
+M2 out b mid 0 NMOD W=4u L=0.18u
+M1 mid a 0 0 NMOD W=4u L=0.18u
+
+* === Load Capacitor ===
+CL out 0 50f
+
+* === Models ===
+.MODEL NMOD NMOS (VTO=0.4 KP=100u)
+.MODEL PMOD PMOS (VTO=0.5 KP=50u)
+
+* === Analysis ===
+* DC sweep input A from 0 to 1.8V while B is held at 1.8V
+*.DC VA 0 1.8 0.01
+.DC VB 0 1.8 0.01

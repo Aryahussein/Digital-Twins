@@ -112,6 +112,33 @@ class SensitivityData:
                 row += f"{matrix_val:<+15.6e}"
             print(row)
 
+    def export_to_csv(self, filepath):
+        """Exports the full 3D sensitivity tensor to a CSV file."""
+        import csv
+        
+        units = {"time": "s", "frequency": "Hz", "voltage": "V"}.get(self.domain, "")
+        
+        with open(filepath, 'w', newline='') as f:
+            writer = csv.writer(f)
+            
+            # Header row
+            header = [f"{self.domain} ({units})", "Parameter"]
+            for node in self.output_nodes:
+                header.append(f"dV({node})")
+            writer.writerow(header)
+            
+            # One row per (sweep_step, parameter) combination
+            for step_idx, sweep_val in enumerate(self.sweep_axis):
+                for p_idx, param in enumerate(self.param_names):
+                    row = [f"{sweep_val:.6e}", param]
+                    for o_idx in range(len(self.output_nodes)):
+                        val = self.data[p_idx, o_idx, step_idx]
+                        if isinstance(val, complex):
+                            row.append(f"{val.real:.6e}{val.imag:+.6e}j")
+                        else:
+                            row.append(f"{val:.6e}")
+                    writer.writerow(row)
+
 
 class SimulationResult:
     """A unified data vault holding the results of a circuit simulation.
