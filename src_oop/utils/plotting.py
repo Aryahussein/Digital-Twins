@@ -724,19 +724,6 @@ def plot_all_faults(
     print(f"All faults plot saved to {folder}/{name}.png")
 
 def plot_worst_case_corners(lc_data, target_node, spec_min, spec_max, tolerance_pct, folder, name, step_idx=-1):
-    """
-    Plots the Sensitivity-Directed Worst-Case (SDWC) Analysis.
-    
-    Args:
-        lc_data (LargeChangeData): The output from the Woodbury Large Change Engine.
-        target_node (str): The node to plot.
-        spec_min (float): The minimum passing voltage specification.
-        spec_max (float): The maximum passing voltage specification.
-        tolerance_pct (float): The factory tolerance (e.g., 0.05 for 5%).
-        folder (str): Output directory.
-        name (str): File name.
-        step_idx (int): The sweep step to evaluate. Use 0 for .OP, or -1 for the end of .TRAN/.DC
-    """
     os.makedirs(folder, exist_ok=True)
     
     alpha_sweep = lc_data.alpha_axis
@@ -744,47 +731,31 @@ def plot_worst_case_corners(lc_data, target_node, spec_min, spec_max, tolerance_
     
     fig, ax = plt.subplots(figsize=(10, 6), dpi=150)
 
-    # Highlight the passing specification region
-    ax.fill_between(alpha_sweep * 100, spec_min, spec_max, 
-                    color='#d4edda', alpha=0.5, label="Passing Spec Region")
+    ax.fill_between(alpha_sweep * 100, spec_min, spec_max, color='#d4edda', alpha=0.5, label="Passing Spec Region")
+    ax.plot(alpha_sweep * 100, v_out, linewidth=3, color='#1f77b4', label="Worst-Case Output Voltage")
 
-    # Plot the calculated Woodbury Voltage Curve
-    ax.plot(alpha_sweep * 100, v_out, linewidth=3, color='#1f77b4', 
-            label="Worst-Case Output Voltage")
-
-    # Plot Spec Limit Boundary Lines
     ax.axhline(spec_max, color='#d62728', linestyle='--', linewidth=2, label=f"Spec Max ({spec_max}V)")
     ax.axhline(spec_min, color='#d62728', linestyle='--', linewidth=2, label=f"Spec Min ({spec_min}V)")
 
-    # Nominal Design Point (alpha = 0)
     nominal_idx = np.argmin(np.abs(alpha_sweep))
-    ax.plot(0, v_out[nominal_idx], 'ko', markersize=8, zorder=5, 
-            label=f"Nominal Design ({v_out[nominal_idx]:.2f}V)")
+    ax.plot(0, v_out[nominal_idx], 'ko', markersize=8, zorder=5, label=f"Nominal Design ({v_out[nominal_idx]:.2f}V)")
 
-    # Find indices for the specific Tolerance Corners
     tol_pos_idx = np.argmin(np.abs(alpha_sweep - tolerance_pct))
     tol_neg_idx = np.argmin(np.abs(alpha_sweep - (-tolerance_pct)))
 
-    # Plot the extremes
-    ax.plot(tolerance_pct * 100, v_out[tol_pos_idx], 'mo', markersize=9, zorder=5, 
-            label=f"Worst-Case Corner (+{tolerance_pct*100:.0f}%)")
-    ax.plot(-tolerance_pct * 100, v_out[tol_neg_idx], 'ro', markersize=9, zorder=5, 
-            label=f"Worst-Case Corner (-{tolerance_pct*100:.0f}%)")
+    ax.plot(tolerance_pct * 100, v_out[tol_pos_idx], 'mo', markersize=9, zorder=5, label=f"Worst-Case Corner (+{tolerance_pct*100:.0f}%)")
+    ax.plot(-tolerance_pct * 100, v_out[tol_neg_idx], 'ro', markersize=9, zorder=5, label=f"Worst-Case Corner (-{tolerance_pct*100:.0f}%)")
 
-    # Add vertical bounds for visual clarity
     ax.axvline(tolerance_pct * 100, color='gray', linestyle=':', linewidth=1.5)
     ax.axvline(-tolerance_pct * 100, color='gray', linestyle=':', linewidth=1.5)
 
-    # formatting & Pass/Fail Evaluation
     ax.set_title("Sensitivity-Directed Worst-Case (SDWC) Analysis", fontsize=14, fontweight='bold', pad=15)
     ax.set_xlabel("Global Parameter Variation (α %)", fontsize=12, fontweight='bold')
     ax.set_ylabel(f"V({target_node}) [V]", fontsize=12, fontweight='bold')
     ax.grid(True, linestyle='--', alpha=0.6)
     
-    # Place legend outside the main data area
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, framealpha=0.9)
 
-    # Evaluate absolute pass/fail boundary
     if v_out[tol_neg_idx] >= spec_min and v_out[tol_pos_idx] <= spec_max:
         status_text = "STATUS: PASS (100% Guaranteed Yield)"
         text_color = 'green'
@@ -800,55 +771,7 @@ def plot_worst_case_corners(lc_data, target_node, spec_min, spec_max, tolerance_
     fig.savefig(os.path.join(folder, f"{name}.png"), dpi=600)
     plt.close()
 
-def plot_transient_envelope(base_result, lc_results, target_node, evaluation_steps_dict, folder, name):
-    """Plots the min/max envelope and marks ALL identified evaluation metrics."""
-    import os
-    os.makedirs(folder, exist_ok=True)
-    t_axis = base_result.sweep_axis * 1e9  
-    n_idx = base_result.node_map[target_node]
-    
-    v_nominal = base_result.VI[:, n_idx]
-    all_waveforms = lc_results.data[:, :, n_idx]
-    v_min = np.min(all_waveforms, axis=0)
-    v_max = np.max(all_waveforms, axis=0)
-
-    print(f"\n--- [DEBUG] MASTER ENVELOPE PLOTTER ---")
-    for step, labels in evaluation_steps_dict.items():
-        print(f"At Step {step} (t={t_axis[step]:.2f}ns):")
-        print(f"  Nominal Voltage: {v_nominal[step]:.4f} V")
-        print(f"  Envelope MAX:    {v_max[step]:.4f} V")
-        print(f"  Envelope MIN:    {v_min[step]:.4f} V")
-        print(f"  VERTICAL SPREAD: {(v_max[step] - v_min[step])*1000:.2f} mV")
-    print(f"---------------------------------------\n")
-    # ===================================
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.fill_between(t_axis, v_min, v_max, color='red', alpha=0.2, label='Woodbury Physical Envelope (± Tol)')
-    ax.plot(t_axis, v_nominal, color='black', linewidth=2, label='Nominal Waveform')
-
-    # Draw a vertical line for every unique step identified by our metrics
-    colors = ['blue', 'purple', 'orange']
-    for i, (step, labels) in enumerate(evaluation_steps_dict.items()):
-        t_eval = t_axis[step]
-        label_str = "+".join([lbl.split('_')[0] for lbl in labels]) # Just print M1+M2, etc.
-        ax.axvline(t_eval, color=colors[i % len(colors)], linestyle='--', linewidth=2, 
-                   label=f'{label_str} Eval Point (t={t_eval:.2f}ns)')
-        
-        # Plot markers on the envelope bounds at these specific points
-        ax.plot(t_eval, v_max[step], 'X', color=colors[i % len(colors)], markersize=8)
-        ax.plot(t_eval, v_min[step], 'X', color=colors[i % len(colors)], markersize=8)
-
-    ax.set_title(f"Master Yield Envelope at {target_node}", fontweight='bold')
-    ax.set_xlabel("Time (ns)", fontweight='bold')
-    ax.set_ylabel(f"Voltage (V)", fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc='best')
-    plt.tight_layout()
-    plt.savefig(f"{folder}/{name}.png", dpi=300)
-    plt.close()
-
 def plot_combined_yield_pdf(mean_out, sigma_out, spec_min, spec_max, target_node, step_idx, folder, name):
-    """Visual A: The pure Gaussian PDF showing true Variance against the specs."""
     os.makedirs(folder, exist_ok=True)
     x_axis = np.linspace(mean_out - 6*sigma_out, mean_out + 6*sigma_out, 1000)
     pdf_values = norm.pdf(x_axis, mean_out, sigma_out)
@@ -879,24 +802,15 @@ def plot_combined_yield_pdf(mean_out, sigma_out, spec_min, spec_max, target_node
     plt.close()
 
 def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, step_idx, folder, name, combined_adjoint_v=None, combined_woodbury_v=None):
-    """
-    Plots a unified grouped bar chart. 
-    Shows Adjoint estimations for ALL parameters, and Woodbury truths for the top K.
-    Expects input data natively in Volts and converts to mV for rendering.
-    """
     os.makedirs(folder, exist_ok=True)
 
-    # 1. Filter out zero-impact noise and reverse for plotting (largest at top)
     clean_data = [d for d in step_specific_ranking if d['dv_expected'] > 1e-9]
-    # clean_data = step_specific_ranking
     clean_data.reverse()
 
     params = [d['param'] for d in clean_data]
     
-    # CONVERT TO MILLIVOLTS STRICTLY FOR THE PLOT ARRAYS
     adj_vals_mv = [d['dv_expected'] * 1000 for d in clean_data] 
     
-    # 2. Extract Woodbury values (Assign 0.0 if Woodbury wasn't run on this parameter)
     wb_vals_mv = []
     for p in params:
         if p in woodbury_deltas:
@@ -904,34 +818,28 @@ def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, ste
         else:
             wb_vals_mv.append(0.0)
 
-    # Append the combined corners (Converting the passed Volts to mV here)
     if combined_woodbury_v is not None and combined_woodbury_v > 0:
         params.append("COMBINED CORNERS (1σ)")
         adj_vals_mv.append(combined_adjoint_v * 1000)
         wb_vals_mv.append(combined_woodbury_v * 1000)
 
-    # 3. Dynamic Height & Grouped Bar Setup
     dynamic_height = max(6, len(params) * 0.5)
     fig, ax = plt.subplots(figsize=(11, dynamic_height))
     
     y = np.arange(len(params))
     height = 0.4 
 
-    # Plot Adjoint slightly above center, Woodbury slightly below center
     rects1 = ax.barh(y + height/2, adj_vals_mv, height, label='Adjoint Prediction (Linear)', color='lightblue', edgecolor='black')
     rects2 = ax.barh(y - height/2, wb_vals_mv, height, label='Woodbury Truth (Non-Linear)', color='coral', edgecolor='black')
 
-    # 4. Formatting and Labels
     ax.set_yticks(y)
     ax.set_yticklabels(params, fontweight='bold')
     ax.set_xlabel('Absolute Output Voltage Shift (mV) per 1σ Variation', fontsize=11, fontweight='bold')
     ax.set_title(f'Unified Sensitivity Ranking: V({target_node}) at Step {step_idx}', fontsize=12, fontweight='bold', pad=15)
     ax.grid(axis='x', linestyle='--', alpha=0.6)
     
-    # Place legend out of the way
     ax.legend(loc='lower right', framealpha=0.9)
 
-    # 5. Add text labels (but skip Woodbury text if it is 0.0)
     max_val = max(max(adj_vals_mv), max(wb_vals_mv))
     
     for rect in rects1:
@@ -941,15 +849,78 @@ def plot_unified_pareto(step_specific_ranking, woodbury_deltas, target_node, ste
 
     for rect in rects2:
         width = rect.get_width()
-        if width > 0.0:  # Only label the bars that actually exist!
+        if width > 0.0:
             ax.text(width + (max_val * 0.01), rect.get_y() + rect.get_height()/2, 
                     f'{width:.2f} mV', va='center', fontweight='bold', color='darkred', fontsize=9)
 
-    # Buffer on the right so text isn't cut off
     ax.set_xlim(0, max_val * 1.15)
 
     plt.tight_layout()
     filepath = os.path.join(folder, f"{name}.png")
     plt.savefig(filepath, dpi=300)
     plt.close()
-    print(f"Saved Unified Pareto Chart to: {filepath}")
+
+def plot_individual_sensitivities(result, all_dv_waveforms, folder, name):
+    """Plots absolute 1-sigma voltage shifts for every parameter."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x_axis = result.sweep_axis * 1e9 if result.analysis_type == ".TRAN" else result.sweep_axis
+    
+    for param, wave in all_dv_waveforms.items():
+        ax.plot(x_axis, wave * 1000, label=param, alpha=0.7, linewidth=1.5)
+
+    ax.set_ylabel('Absolute Output Shift $\Delta V_{out}$ (mV)', fontweight='bold')
+    ax.set_xlabel('Time (ns)' if result.analysis_type == ".TRAN" else 'Sweep', fontweight='bold')
+    ax.set_title('Absolute 1$\sigma$ Adjoint Impact ($S_{raw} \cdot \sigma_p$)', fontweight='bold')
+    ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left', fontsize='small')
+    ax.grid(True, linestyle=':', alpha=0.6)
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder, f"{name}.png"), dpi=300); plt.close()
+
+def plot_sigma_metrics(result, m1_wave, m2_wave, m3_wave, m4_wave, step_m1, step_m2, step_m3, step_m4, folder, name):
+    """Compares metrics and marks exactly where evaluation steps occur."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x_axis = result.sweep_axis * 1e9 if result.analysis_type == ".TRAN" else result.sweep_axis
+
+    # Unit conversion to mV
+    data = [m1_wave*1000, np.sqrt(m2_wave)*1000, m3_wave*1000, m4_wave*1000]
+    steps = [step_m1, step_m2, step_m3, step_m4]
+    colors = ['royalblue', 'forestgreen', 'grey', 'darkorange']
+    labels = ['M1: Max Indiv (1$\sigma$)', 'M2: Total RSS (1$\sigma$)', 'M3: Phys Bounds', 'M4: Woodbury (1$\sigma$)']
+
+    for wave, step, color, label in zip(data, steps, colors, labels):
+        ax.plot(x_axis, wave, color=color, linewidth=2, label=label, alpha=0.3 if color=='grey' else 0.8)
+        # Mark the actual evaluation point on the curve
+        ax.plot(x_axis[step], wave[step], 'o', color=color, markersize=8, markeredgecolor='black', zorder=5)
+
+    ax.set_ylabel('Voltage Deviation (mV)', fontweight='bold')
+    ax.set_title('Direct Comparison of Yield Metrics (Markers at Eval Steps)', fontweight='bold')
+    ax.legend(); ax.grid(True, alpha=0.3); plt.tight_layout()
+    plt.savefig(os.path.join(folder, f"{name}.png"), dpi=300); plt.close()
+
+def plot_transient_envelope(base_result, lc_1sigma_results, target_node, evaluation_list, folder, name):
+    """Master Envelope: Strictly 1-sigma with separate lines for every metric."""
+    t_axis = base_result.sweep_axis * 1e9  
+    n_idx = base_result.node_map[target_node]
+    v_nom = base_result.VI[:, n_idx]
+    
+    # Use M4 (1-sigma) for the shading
+    all_waves = lc_1sigma_results.data[:, :, n_idx]
+    v_min, v_max = np.min(all_waves, axis=0), np.max(all_waves, axis=0)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.fill_between(t_axis, v_min, v_max, color='red', alpha=0.1, label='Woodbury 1$\sigma$ Envelope')
+    ax.plot(t_axis, v_nom, color='black', linewidth=1.5, label='Nominal')
+
+    metric_colors = {'M1': 'blue', 'M2': 'green', 'M3': 'red', 'M4': 'darkorange'}
+    for (step, label) in evaluation_list:
+        color = metric_colors.get(label[:2], 'purple')
+        ax.axvline(t_axis[step], color=color, linestyle='--', alpha=0.5, linewidth=1)
+        ax.plot(t_axis[step], v_max[step], 'X', color=color, markersize=7, label=f'Eval {label}')
+        ax.plot(t_axis[step], v_min[step], 'X', color=color, markersize=7)
+
+    ax.set_title(f"Master 1$\sigma$ Yield Envelope: {target_node}", fontweight='bold')
+    ax.set_ylabel("Voltage (V)"); ax.set_xlabel("Time (ns)")
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='small')
+    ax.grid(True, alpha=0.2); plt.tight_layout()
+    plt.savefig(os.path.join(folder, f"{name}.png"), dpi=300); plt.close()
+

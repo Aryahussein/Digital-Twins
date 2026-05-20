@@ -100,13 +100,20 @@ if __name__ == "__main__":
     # output_nodes = ["n3"]
     # target_node = "n3"
     # target_parameter = "M3_W"
+    #
+    # netlist = "CMOS_inverter_CAP_tighter_tol"  # e.g., nmos_inverter, 1T1C_dram_cell
+    #
+    # plot_nodes = ["IN", "OUT"]
+    # output_nodes = ["OUT"]
+    # target_node = "OUT"
+    # target_parameter = "CL"
 
-    netlist = "CMOS_inverter_CAP"  # e.g., nmos_inverter, 1T1C_dram_cell
+    netlist = "rc_transient"  # e.g., nmos_inverter, 1T1C_dram_cell
 
-    plot_nodes = ["IN", "OUT"]
-    output_nodes = ["OUT"]
-    target_node = "OUT"
-    target_parameter = "CL"
+    plot_nodes = ["in", "out"]
+    output_nodes = ["out"]
+    target_node = "out"
+    target_parameter = "C1"
     
     file_path = f"../testfiles/{netlist}.txt"
     # --- Application Toggles ---
@@ -124,9 +131,6 @@ if __name__ == "__main__":
     user_eval_step = None
 
     number_of_large_change_params = 4 # Number of parameters to sweep in large change analysis
-
-    factory_tol = 0.2           # Components vary by ±5%
-    manufacturing_sigma = 1       # Factory is a 6-Sigma process
 
     output_spec = 0.05             # Output voltage must stay within ±5%
     output_sigma_req = 6          # We demand a 6-Sigma yield from the circuit
@@ -236,8 +240,6 @@ if __name__ == "__main__":
             calculated_params=calculated_params,
             netlist_name=netlist,
             folder_map=folder_map,
-            factory_tolerance=factory_tol,
-            sigma_level=manufacturing_sigma,
             out_spec=output_spec,
             out_sigma_level=output_sigma_req,
             k_params=number_of_large_change_params

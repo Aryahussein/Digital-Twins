@@ -2,7 +2,6 @@ import numpy as np
 from scipy.stats import norm
 
 def _find_component_for_param(circuit, param):
-    """Safely finds the component associated with a parameter string."""
     sorted_comps = sorted(circuit.components, key=lambda c: len(c.name), reverse=True)
     for comp in sorted_comps:
         if param == comp.name or param.startswith(comp.name + "_"):
@@ -10,7 +9,6 @@ def _find_component_for_param(circuit, param):
     return None
 
 def _get_nominal_values(circuit, param_names):
-    """Extracts nominal values by delegating directly to the components."""
     p_vals = []
     for param in param_names:
         comp = _find_component_for_param(circuit, param)
@@ -19,65 +17,53 @@ def _get_nominal_values(circuit, param_names):
         p_vals.append(comp.get_nominal_value(param))
     return np.array(p_vals)
 
-
 def _get_param_specs(circuit, param_name):
-    """
-    Fetches the hardcoded netlist tolerance (e.g. GAUSS) for a parameter.
-    If no statistical wrapper was used, assumes the component is deterministic (tolerance = 0.0).
-    """
     comp = circuit.param_to_component_map.get(param_name)
-    param_base = param_name.split('_')[-1] # Extracts 'W' from 'M_N_W'
+    param_base = param_name.split('_')[-1] 
     
     if comp and "stat_params" in comp.data:
-        # Check instance-level params (e.g., M_N_W)
         if param_base in comp.data["stat_params"]:
             stats = comp.data["stat_params"][param_base]
             return stats["tol"], stats["sigma"]
             
-        # Check primary value (e.g., V_VDD or C_LOAD)
         if "VALUE" in comp.data["stat_params"]:
             stats = comp.data["stat_params"]["VALUE"]
             return stats["tol"], stats["sigma"]
             
-    # --- NEW: If the netlist didn't specify, the component is deterministic (0 variance)! ---
-    return 0.0, 0
+    return 0.0, 3.0
 
-def analyze_and_rank_sensitivities_globally(circuit, result, target_node, candidate_params, k=3, tolerance_pct=0.05):
+
+def analyze_and_rank_sensitivities_globally(circuit, result, target_node, candidate_params, k=3):
     sensitivities = result.sensitivities
     o_idx = sensitivities.output_index[target_node]
     p_noms = _get_nominal_values(circuit, candidate_params)
 
     full_ranking = []
-    
     num_steps = len(result.sweep_axis)
     max_individual_dv_waveform = np.zeros(num_steps)
     total_variance_waveform = np.zeros(num_steps)
+    all_dv_waveforms = {}
 
     for param, p_nom in zip(candidate_params, p_noms):
         if p_nom == 0: continue
-        # comp_name = param.split('_')[0].upper()
-        # if comp_name.startswith('V') or comp_name.startswith('I'): continue
             
         p_idx = sensitivities.param_index[param]
         raw_sens_waveform = sensitivities.data[p_idx, o_idx, :]
-
-        p_tol, _ = _get_param_specs(circuit, param)
+        p_tol, p_sig_level = _get_param_specs(circuit, param)
         
-        # dV/dp * delta_p
-        expected_dv_waveform = np.abs(raw_sens_waveform * p_nom * p_tol)
+        # Calculate TRUE 1-Sigma Impact: S_raw * (p_nom * tol / sigma_level)
+        p_sigma = (p_nom * p_tol) / p_sig_level
+        expected_dv_waveform = np.abs(raw_sens_waveform * p_sigma)
         
-        # Build Metric 2 (Sum of Variances)
+        all_dv_waveforms[param] = expected_dv_waveform
         total_variance_waveform += expected_dv_waveform**2
         
-        # Build Metric 1 (Max Individual Impact)
         mask = expected_dv_waveform > max_individual_dv_waveform
         max_individual_dv_waveform[mask] = expected_dv_waveform[mask]
         
-        max_dv_expected = np.max(expected_dv_waveform)
-        
         full_ranking.append({
             'param': param, 
-            'dv_expected': max_dv_expected,
+            'dv_expected': np.max(expected_dv_waveform),
             'rel_sens': np.max(np.abs(raw_sens_waveform * p_nom)) 
         })
         
@@ -85,35 +71,22 @@ def analyze_and_rank_sensitivities_globally(circuit, result, target_node, candid
     k_actual = min(k, len(full_ranking))
     top_params = [data['param'] for data in full_ranking[:k_actual]]
     
-    sim_start = 0
-    if getattr(result, "analysis_type", "") == ".TRAN":
-        sim_start = 1
-
-    # Extract the exact time steps for the metrics
+    sim_start = 1 if getattr(result, "analysis_type", "") == ".TRAN" else 0
     step_metric1 = int(np.argmax(max_individual_dv_waveform[sim_start:])) + sim_start
     step_metric2 = int(np.argmax(total_variance_waveform[sim_start:])) + sim_start
     
-    return top_params, full_ranking, step_metric1, step_metric2
+    return top_params, full_ranking, step_metric1, step_metric2, max_individual_dv_waveform, total_variance_waveform, all_dv_waveforms
 
-
-def generate_worst_case_deltas(circuit, result, target_node, alpha_array, top_params, eval_step=None):
-    """
-    Generates the Delta P matrix based strictly on the sensitivity direction.
-    If eval_step is None, it dynamically finds the global worst-case direction.
-    """
+def generate_worst_case_deltas(circuit, result, target_node, alpha_array, top_params, eval_step=None, use_1sigma=False):
     sensitivities = result.sensitivities
     o_idx = sensitivities.output_index[target_node]
     
     S_raw = np.zeros(len(top_params))
     for i, p in enumerate(top_params):
         p_idx = sensitivities.param_index[p]
-        
         if eval_step is not None:
-            # We know the exact step we care about
             S_raw[i] = sensitivities.data[p_idx, o_idx, eval_step]
         else:
-            # Scouting Mode: Find the time index where THIS specific parameter 
-            # had its absolute maximum impact, and grab the sensitivity there.
             idx_max = np.argmax(np.abs(sensitivities.data[p_idx, o_idx, :]))
             S_raw[i] = sensitivities.data[p_idx, o_idx, idx_max]
             
@@ -122,24 +95,34 @@ def generate_worst_case_deltas(circuit, result, target_node, alpha_array, top_pa
     
     weights = np.sign(S_norm) 
     weights[weights == 0] = 1.0 
-   
-    param_tols = np.array([_get_param_specs(circuit, p)[0] for p in top_params])
+    
+    param_tols = []
+    for p in top_params:
+        tol, sig = _get_param_specs(circuit, p)
+        if use_1sigma and sig > 0:
+            param_tols.append(tol / sig) 
+        else:
+            param_tols.append(tol)       
+            
+    param_tols = np.array(param_tols)
     dp_matrix = alpha_array[:, None] * weights[None, :] * param_tols[None, :] * p_nom[None, :]
     
     return dp_matrix
 
-def calculate_analytical_yield(circuit, result, target_node, step_idx, spec_min, spec_max, tolerance_pct=0.10, sigma_level=3):
-    """Projects component PDFs onto the output node evaluated exactly at the step index."""
+
+def calculate_analytical_yield(circuit, result, target_node, step_idx, spec_min, spec_max):
     sensitivities = result.sensitivities
     o_idx = sensitivities.output_index[target_node]
     param_names = sensitivities.param_names
     
     S_raw = np.zeros(len(param_names))
-    for i in range(len(param_names)):
-        S_raw[i] = sensitivities.data[i, o_idx, step_idx]
+    p_sigma = np.zeros(len(param_names))
     
-    p_nom = _get_nominal_values(circuit, param_names)
-    p_sigma = (p_nom * tolerance_pct) / sigma_level
+    for i, p in enumerate(param_names):
+        S_raw[i] = sensitivities.data[i, o_idx, step_idx]
+        p_nom = _get_nominal_values(circuit, [p])[0]
+        p_tol, p_sig = _get_param_specs(circuit, p)
+        p_sigma[i] = (p_nom * p_tol) / p_sig
     
     variance_out = np.sum((S_raw * p_sigma)**2)
     sigma_out = np.sqrt(variance_out)
@@ -159,74 +142,50 @@ def calculate_analytical_yield(circuit, result, target_node, step_idx, spec_min,
 
     return mean_out, sigma_out, yield_pct
 
-def calculate_large_change_yield(circuit, base_result, target_node, step_idx, top_params, spec_min, spec_max, tolerance_pct=0.10, sigma_level=3):
-    """
-    Projects component PDFs onto the output node using EXACT non-linear voltage shifts.
-    Architecturally pure: Evaluates each parameter in isolation and returns a dict of distinct data vaults.
-    """
+
+def calculate_large_change_yield(circuit, base_result, target_node, step_idx, top_params, spec_min, spec_max):
     from engines.large_change_engine import LargeChangeEngine
     
     v_nom = base_result.VI[step_idx][base_result.node_map[target_node]]
     actual_delta_Vs = np.zeros(len(top_params))
     method = getattr(base_result, "method", "TR") if base_result.analysis_type == ".TRAN" else "TR"
     
-    # Dictionary to hold the independent data vaults for each parameter
     lc_vaults = {}
     woodbury_deltas = {}
     
-    print("\n--- Executing Isolated Woodbury +1\u03c3 Jumps ---")
+    print("\n--- Executing Isolated Woodbury Worst-Case Jumps ---")
     
     for i, param in enumerate(top_params):
         p_nom = _get_nominal_values(circuit, [param])[0]
         p_tol, p_sigma_level = _get_param_specs(circuit, param)
         
-        p_sigma = (p_nom * p_tol) / p_sigma_level
+        p_wc_delta = p_nom * p_tol
+        dp_matrix = np.array([[p_wc_delta]])
         
-        # 2. Build a localized 1x1 sweep matrix (One parameter, One variation)
-        dp_matrix = np.array([[p_sigma]])
-        
-        # 3. Fire the engine for JUST this parameter
-        # The variation axis is cleanly set to [1.0] representing 1 standard deviation
         engine = LargeChangeEngine(circuit)
         
-        # Temporarily suppress the engine's internal print statement to keep the console clean
-        import sys, os
-        old_stdout = sys.stdout
-        sys.stdout = open(os.devnull, 'w')
-        try:
-            lc_result = engine.compute(
-                result=base_result, 
-                param_names=[param], 
-                dp_matrix=dp_matrix,
-                variation_axis=np.array([1.0]),  # A true, pure numerical axis!
-                method=method
-            )
-        finally:
-            sys.stdout.close()
-            sys.stdout = old_stdout
+        # Unsuppressed evaluation
+        lc_result = engine.compute(
+            result=base_result, 
+            param_names=[param], 
+            dp_matrix=dp_matrix,
+            variation_axis=np.array([1.0]), 
+            method=method
+        )
             
-        # Store the dedicated vault
         lc_vaults[param] = lc_result
         
-        # 4. Extract the voltage shift at the exact evaluation step
-        # Since there's only 1 variation in this vault, var_idx is 0
-        v_shifted = np.real(lc_result(target_node, var_idx=0, step_idx=step_idx))
-        actual_delta_Vs[i] = v_shifted - v_nom
-        woodbury_deltas[param] = actual_delta_Vs[i]
-        # # ===== INJECT THIS DEBUG BLOCK =====
-        # print(f"  [DEBUG Woodbury Jump - {param}]")
-        # print(f"    Nominal V: {v_nom:.6f} V")
-        # print(f"    Shifted V: {v_shifted:.6f} V")
-        # print(f"    Delta V:   {actual_delta_Vs[i]*1000:.2f} mV")
-        # # ===================================
+        v_shifted_wc = np.real(lc_result(target_node, var_idx=0, step_idx=step_idx))
+        delta_v_wc = v_shifted_wc - v_nom
         
-        print(f"  {param:<10}: +1\u03c3 \u0394V = {actual_delta_Vs[i]:+.4e} V")
+        actual_delta_Vs[i] = delta_v_wc / p_sigma_level
+        woodbury_deltas[param] = actual_delta_Vs[i]
+        
+        print(f"  {param:<10}: ΔV_wc = {delta_v_wc:+.4e} V -> Effective 1σ ΔV = {actual_delta_Vs[i]:+.4e} V")
 
-    # 5. Non-Linear Propagation of Variance
     variance_out = np.sum(actual_delta_Vs**2)
     sigma_out = np.sqrt(variance_out)
     
-    # 6. Calculate Yield Percentage using the CDF
     prob_passing = norm.cdf(spec_max, loc=v_nom, scale=sigma_out) - norm.cdf(spec_min, loc=v_nom, scale=sigma_out)
     yield_pct = prob_passing * 100.0
     dpmo = (1.0 - prob_passing) * 1_000_000
@@ -238,5 +197,4 @@ def calculate_large_change_yield(circuit, base_result, target_node, step_idx, to
     print(f"Yield:        {yield_pct:.6f}%")
     print(f"DPMO:         {dpmo:.2f}")
 
-    # Return the dictionary of vaults so they can be plotted individually if desired!
     return v_nom, sigma_out, yield_pct, lc_vaults, woodbury_deltas

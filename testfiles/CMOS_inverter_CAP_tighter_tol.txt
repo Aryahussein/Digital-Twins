@@ -1,0 +1,27 @@
+* ====================================================================
+* STATISTICAL CMOS INVERTER NETLIST
+* ====================================================================
+
+* 1. THE POWER SUPPLY
+V_VDD VDD 0 GAUSS(1.8, 0.05, 6)
+
+* 2. THE INPUT SIGNAL (Perfectly ideal, no statistical variance)
+V_IN IN 0 PULSE(0 1.8 1n 10p 10p 2n 4n)
+
+* 3. GLOBAL PROCESS CORNERS
+.MODEL NMOS_MOD NMOS (VTO=GAUSS(0.7, 0.05, 6) KP=GAUSS(120u, 0.05, 6))
+.MODEL PMOS_MOD PMOS (VTO=GAUSS(-0.7, 0.05, 6) KP=GAUSS(40u, 0.05, 6))
+
+* 4. LOCAL DEVICE MISMATCH
+M_N OUT IN 0 0 NMOS_MOD W=GAUSS(2u, 0.05, 6) L=0.18u
+M_P OUT IN VDD VDD PMOS_MOD W=GAUSS(4u, 0.05, 6) L=0.18u
+
+* 5. THE LOAD
+C_LOAD OUT 0 GAUSS(10f, 0.05, 6)
+
+.TRAN 0.01n 10n
+.END
+
+
+
+
